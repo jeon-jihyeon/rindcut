@@ -1,0 +1,13 @@
+{
+  "name": "rindcut",
+  "owner": {
+    "name": "jeon-jihyeon"
+  },
+  "plugins": [
+    {
+      "name": "rindcut",
+      "source": "./plugin",
+      "description": "Checks that your scheduled AI jobs really ran and really produced what they promised, judged from the real output instead of the agent's word."
+    }
+  ]
+}

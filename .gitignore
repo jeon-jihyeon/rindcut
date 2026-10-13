@@ -1,0 +1,22 @@
+# build output
+/bin/
+/dist/
+/rindcut
+*.test
+*.prof
+cover.out
+
+# local notes, records and settings
+.claude/settings.local.json
+CLAUDE.local.md
+/tmp/
+
+# environment
+.env*
+!.env.example
+
+# editors and the OS
+.vscode
+.idea
+*.swp
+.DS_Store

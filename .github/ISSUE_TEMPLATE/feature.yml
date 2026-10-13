@@ -1,0 +1,21 @@
+name: Feature request
+description: A check or a behavior rindcut should have
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you check by hand today
+      description: The scheduled job you still verify yourself, and how you find out it failed
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What rindcut should do
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you tried

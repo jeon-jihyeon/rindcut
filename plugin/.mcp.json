@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "rindcut": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/rindcut",
+      "args": ["mcp"]
+    }
+  }
+}

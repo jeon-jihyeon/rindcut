@@ -1,0 +1,136 @@
+#!/bin/sh
+# Finds or fetches the rindcut binary of this plugin's version and runs it with the given arguments
+# 1. `~/.rindcut/bin/v<version>/rindcut` when a previous run fetched it
+# 2. the GitHub release of that version for this OS and architecture, verified against its `checksums.txt`
+# 3. go install of the same version when Go is present and the release could not be fetched
+# 4. another rindcut on PATH when it answers the plugin version, or any version when RINDCUT_ALLOW_PATH is 1
+# Every source that runs is linked from the stable path, which the tick schedule calls
+# The version is read from the plugin manifest so the plugin and the binary it runs never drift
+set -eu
+
+REPO="jeon-jihyeon/rindcut"
+ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+MANIFEST="${ROOT}/.claude-plugin/plugin.json"
+
+version=$(sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$MANIFEST" | head -n 1)
+if [ -z "$version" ]; then
+  echo "rindcut: no version in ${MANIFEST}" >&2
+  exit 1
+fi
+TAG="v${version}"
+HOME_DIR="${RINDCUT_HOME:-${HOME}/.rindcut}"
+BIN_DIR="${HOME_DIR}/bin/${TAG}"
+BIN="${BIN_DIR}/rindcut"
+STABLE="${HOME_DIR}/bin/rindcut"
+
+# The tick schedule calls the stable path, so it must never go missing
+# A link that already names the target is left alone, otherwise a temp link is renamed over it in one step
+stable() {
+  [ "$(readlink "$STABLE" 2>/dev/null || true)" = "$1" ] && return 0
+  mkdir -p "${HOME_DIR}/bin" 2>/dev/null || return 0
+  tmp_link="${STABLE}.$$"
+  if ln -sfn "$1" "$tmp_link" 2>/dev/null && mv -f "$tmp_link" "$STABLE" 2>/dev/null; then
+    return 0
+  fi
+  rm -f "$tmp_link" 2>/dev/null || true
+}
+
+if [ -x "$BIN" ]; then
+  stable "$BIN"
+  exec "$BIN" "$@"
+fi
+
+# The SessionEnd hook has 1.5 s, too short to fetch or build
+# It skips quietly and the tick's transcript backfill records the session later
+if [ "${1:-}" = "hook" ]; then
+  exit 0
+fi
+
+os=$(uname -s | tr '[:upper:]' '[:lower:]')
+arch=$(uname -m)
+case "$arch" in
+  x86_64) arch=amd64 ;;
+  aarch64 | arm64) arch=arm64 ;;
+esac
+ARCHIVE="rindcut_${os}_${arch}.tar.gz"
+BASE_URL="https://github.com/${REPO}/releases/download/${TAG}"
+
+sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d ' ' -f 1
+    return
+  fi
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | cut -d ' ' -f 1
+    return
+  fi
+  return 1
+}
+
+# Returns 1 when the release can't be fetched, so the next source is tried
+# 1. a checksum mismatch exits, because the download can't be trusted
+# 2. the binary is unpacked in a temp directory and renamed, so the cached path never holds a partial file
+fetch() {
+  command -v curl >/dev/null 2>&1 || return 1
+  mkdir -p "$BIN_DIR" || return 1
+  tmp=$(mktemp -d "${BIN_DIR}/.fetch.XXXXXX") || return 1
+  # Bounded, so a start never waits out its timeout on a network that does not answer
+  if ! curl -fsSL --connect-timeout 5 --max-time 60 "${BASE_URL}/${ARCHIVE}" -o "${tmp}/${ARCHIVE}" 2>/dev/null ||
+    ! curl -fsSL --connect-timeout 5 --max-time 30 "${BASE_URL}/checksums.txt" -o "${tmp}/checksums.txt" 2>/dev/null; then
+    rm -rf "$tmp"
+    return 1
+  fi
+  if ! got=$(sha256 "${tmp}/${ARCHIVE}") || [ -z "$got" ]; then
+    echo "rindcut: can't compute the sha256 of ${ARCHIVE} with sha256sum or shasum, so it isn't trusted" >&2
+    rm -rf "$tmp"
+    return 1
+  fi
+  want=$(awk -v f="$ARCHIVE" '$2 == f { print $1 }' "${tmp}/checksums.txt")
+  if [ -z "$want" ] || [ "$want" != "$got" ]; then
+    echo "rindcut: checksum of ${ARCHIVE} in release ${TAG} doesn't match checksums.txt, refusing to run it" >&2
+    rm -rf "$tmp"
+    exit 1
+  fi
+  if ! tar -xzf "${tmp}/${ARCHIVE}" -C "$tmp" rindcut || ! chmod +x "${tmp}/rindcut" || ! mv -f "${tmp}/rindcut" "$BIN"; then
+    rm -rf "$tmp"
+    return 1
+  fi
+  rm -rf "$tmp"
+  echo "rindcut: fetched ${TAG} for ${os}/${arch} into ${BIN}" >&2
+}
+
+if fetch; then
+  stable "$BIN"
+  exec "$BIN" "$@"
+fi
+
+if command -v go >/dev/null 2>&1; then
+  echo "rindcut: couldn't fetch release ${TAG} for ${os}/${arch}, building with go install" >&2
+  if GOBIN="$BIN_DIR" go install "github.com/${REPO}/cmd/rindcut@${TAG}"; then
+    stable "$BIN"
+    exec "$BIN" "$@"
+  fi
+fi
+
+# command -v may name this launcher itself when the plugin bin directory is on PATH
+found=$(command -v rindcut 2>/dev/null || true)
+if [ -n "$found" ] && [ ! "$found" -ef "$0" ]; then
+  have=$("$found" version 2>/dev/null || echo unknown)
+  case "$have" in
+    "$version" | "v$version") ;;
+    *)
+      if [ "${RINDCUT_ALLOW_PATH:-}" != 1 ]; then
+        echo "rindcut: ${found} on PATH is version ${have} but the plugin needs ${version}. Restart Claude Code with network access, run go install github.com/${REPO}/cmd/rindcut@${TAG}, or set RINDCUT_ALLOW_PATH=1 where Claude Code starts to run that build anyway" >&2
+        exit 1
+      fi
+      echo "rindcut: running ${found}, version ${have}, where the plugin expects ${version}, because RINDCUT_ALLOW_PATH is 1" >&2
+      ;;
+  esac
+  case "$found" in
+    /*) [ "$found" = "$STABLE" ] || [ "$found" -ef "$STABLE" ] || stable "$found" ;;
+  esac
+  exec "$found" "$@"
+fi
+
+echo "rindcut: couldn't fetch ${TAG} from ${BASE_URL} or build it with Go. Install Go from https://go.dev/dl and run again, or put a rindcut binary on PATH" >&2
+exit 1

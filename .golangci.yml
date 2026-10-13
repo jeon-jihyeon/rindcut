@@ -1,0 +1,126 @@
+version: "2"
+linters:
+  enable:
+    - depguard
+    - dupl
+    - funlen
+    - gocritic
+    - gocyclo
+    - nakedret
+    - revive
+    - unparam
+  settings:
+    errcheck:
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+    funlen:
+      lines: 70
+      statements: 50
+    dupl:
+      threshold: 120
+    gocyclo:
+      min-complexity: 15
+    revive:
+      rules:
+        - name: comment-spacings
+          disabled: true
+        - name: exported
+          disabled: true
+    # The layer rules of the capability map
+    # lock and check import no rindcut package, ledger imports lock only, job imports check only
+    # judge decides and records, export carries the ledger out, and neither imports the other
+    # app wires them for cmd and mcp, and cmd/rindcut is the composition root
+    depguard:
+      rules:
+        base:
+          files:
+            - "**/internal/lock/**"
+            - "**/internal/check/**"
+            - "**/internal/ledger/**"
+          deny:
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/job
+              desc: lock, check and ledger sit below job
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/judge
+              desc: lock, check and ledger sit below judge
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/export
+              desc: lock, check and ledger sit below export
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/app
+              desc: lock, check and ledger sit below app
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/mcp
+              desc: lock, check and ledger sit below mcp
+        lock:
+          files:
+            - "**/internal/lock/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/
+              desc: lock imports no rindcut package
+        check:
+          files:
+            - "**/internal/check/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/
+              desc: check imports no rindcut package
+        ledger:
+          files:
+            - "**/internal/ledger/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/check
+              desc: ledger keeps check results in its own record type
+        job:
+          files:
+            - "**/internal/job/**"
+          deny:
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/ledger
+              desc: job takes revision times from its caller and never reads the ledger
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/judge
+              desc: job is below judge
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/export
+              desc: job is below export
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/app
+              desc: job is below app
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/mcp
+              desc: job is below mcp
+        judge:
+          files:
+            - "**/internal/judge/**"
+          deny:
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/export
+              desc: judge writes verdicts and never calls an exporter
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/app
+              desc: judge is below app
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/mcp
+              desc: judge is below mcp
+        export:
+          files:
+            - "**/internal/export/**"
+          deny:
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/judge
+              desc: export reads the ledger only
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/job
+              desc: export reads the ledger only
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/check
+              desc: export reads the ledger only
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/app
+              desc: export is below app
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/mcp
+              desc: export is below mcp
+        app:
+          files:
+            - "**/internal/app/**"
+          deny:
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/mcp
+              desc: app is below mcp
+  exclusions:
+    rules:
+      # Tests are scenarios and not units
+      - path: _test\.go
+        linters:
+          - dupl
+          - funlen
+          - gocyclo
+          - unparam

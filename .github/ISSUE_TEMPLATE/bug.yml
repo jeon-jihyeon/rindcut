@@ -1,0 +1,44 @@
+name: Bug report
+description: Something rindcut did wrong or failed to do
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. For a security problem use private reporting from the Security tab instead.
+        Leave out tokens, file contents and paths you would not post publicly.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what rindcut did, and what you expected instead
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+  - type: input
+    id: version
+    attributes:
+      label: rindcut version
+      description: Output of `rindcut version`
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - macOS arm64
+        - macOS amd64
+        - Linux amd64
+        - Linux arm64
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Anything else
+      render: text

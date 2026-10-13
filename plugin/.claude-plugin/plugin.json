@@ -1,0 +1,8 @@
+{
+  "name": "rindcut",
+  "version": "0.1.0",
+  "description": "Checks that your scheduled AI jobs really ran and really produced what they promised, judged from the real output instead of the agent's word.",
+  "author": {
+    "name": "jeon-jihyeon"
+  }
+}
