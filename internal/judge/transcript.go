@@ -8,8 +8,6 @@ import (
 	"os"
 	"strings"
 	"time"
-
-	"github.com/jeon-jihyeon/rindcut/internal/ledger"
 )
 
 const (
@@ -33,15 +31,24 @@ type transcriptLine struct {
 	} `json:"message"`
 }
 
-// ReadSession reads who started a session, where and when, from the head of its transcript
+// Transcript is what the head of a Claude Code transcript says about its session
+// The caller turns it into a session record, so reading a transcript never depends on how sessions are stored
+type Transcript struct {
+	SessionID   string
+	Cwd         string
+	StartedAt   time.Time
+	FirstPrompt string
+}
+
+// ReadTranscript reads who started a session, where and when, from the head of its transcript
 // The first real user prompt is the one a scheduled run sends, so it carries the job marker
-func ReadSession(path string) (ledger.Session, error) {
+func ReadTranscript(path string) (Transcript, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return ledger.Session{}, err
+		return Transcript{}, err
 	}
 	defer func() { _ = f.Close() }()
-	s := ledger.Session{TranscriptPath: path}
+	var s Transcript
 	r := bufio.NewReader(io.LimitReader(f, transcriptHead))
 	for {
 		raw, err := r.ReadBytes('\n')
@@ -58,7 +65,7 @@ func ReadSession(path string) (ledger.Session, error) {
 	}
 }
 
-func fill(s *ledger.Session, line transcriptLine) {
+func fill(s *Transcript, line transcriptLine) {
 	if s.SessionID == "" {
 		s.SessionID = line.SessionID
 	}
