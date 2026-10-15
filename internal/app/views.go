@@ -179,7 +179,7 @@ func (a App) RecordSession(ctx context.Context, hook ledger.Session) (bool, erro
 		return false, err
 	}
 	s := hook
-	if t, err := judge.ReadSession(hook.TranscriptPath); err == nil {
+	if t, err := judge.ReadTranscript(hook.TranscriptPath); err == nil {
 		s.FirstPrompt, s.StartedAt = t.FirstPrompt, t.StartedAt
 		if s.Cwd == "" {
 			s.Cwd = t.Cwd

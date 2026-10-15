@@ -199,14 +199,20 @@ func (j Judge) backfill(ctx context.Context, st state, since time.Time) (int, er
 		if err != nil || info.ModTime().Before(since) {
 			continue
 		}
-		s, err := ReadSession(p)
-		if err != nil || !s.Complete() || !InFolders(s.Cwd, folders) {
+		t, err := ReadTranscript(p)
+		if err != nil {
+			continue
+		}
+		s := ledger.Session{
+			SessionID: t.SessionID, Cwd: t.Cwd, StartedAt: t.StartedAt, FirstPrompt: t.FirstPrompt,
+			TranscriptPath: p, EndedAt: info.ModTime().UTC(), Source: ledger.SourceBackfill,
+		}
+		if !s.Complete() || !InFolders(s.Cwd, folders) {
 			continue
 		}
 		if known, ok := st.sessions[s.SessionID]; ok && known.Complete() {
 			continue
 		}
-		s.EndedAt, s.Source = info.ModTime().UTC(), ledger.SourceBackfill
 		if _, err := j.Ledger.Append(ctx, ledger.KindSession, s); err != nil {
 			return added, err
 		}
