@@ -6,12 +6,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"time"
+
+	"github.com/google/jsonschema-go/jsonschema"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/jeon-jihyeon/rindcut/internal/app"
 	"github.com/jeon-jihyeon/rindcut/internal/check"
+	"github.com/jeon-jihyeon/rindcut/internal/export"
 	"github.com/jeon-jihyeon/rindcut/internal/job"
 	"github.com/jeon-jihyeon/rindcut/internal/ledger"
 )
@@ -115,30 +119,30 @@ func since(text string, fallback time.Duration) (time.Duration, error) {
 func New(a app.App) *sdk.Server {
 	srv := sdk.NewServer(&sdk.Implementation{Name: "rindcut", Version: a.Version}, nil)
 	add(srv, "job_preview", "Validate a scheduled job, list its next 3 runs and check its latest past run right now without counting it. This runs the job's checks on this machine now: command checks execute as shell commands in the job folder, http checks make requests. Show the owner the probe in plain words before saving."+dataNote,
-		func(ctx context.Context, in JobInput) (any, error) {
+		func(ctx context.Context, in JobInput) (app.Preview, error) {
 			j, err := in.job()
 			if err != nil {
-				return nil, err
+				return app.Preview{}, err
 			}
 			return a.Preview(ctx, j)
 		})
 	add(srv, "job_save", "Save a job the owner previewed and agreed to. Refused unless the same job was previewed in the last 30 minutes. Schedules the 5-minute checker on the first save.",
-		func(ctx context.Context, in SaveInput) (any, error) {
+		func(ctx context.Context, in SaveInput) (app.Saved, error) {
 			if !in.Confirmed {
-				return nil, fmt.Errorf("set confirmed only after the owner agreed to the preview")
+				return app.Saved{}, fmt.Errorf("set confirmed only after the owner agreed to the preview")
 			}
 			j, err := in.job()
 			if err != nil {
-				return nil, err
+				return app.Saved{}, err
 			}
 			return a.Save(ctx, j)
 		})
 	add(srv, "job_list", "List jobs with their last verdict and next run."+dataNote,
-		func(ctx context.Context, in ListInput) (any, error) { return a.Jobs(ctx, in.All) })
+		func(ctx context.Context, in ListInput) ([]app.JobView, error) { return a.Jobs(ctx, in.All) })
 	add(srv, "job_remove", "Stop checking a job. Its history stays.",
-		func(ctx context.Context, in RemoveInput) (any, error) { return a.Remove(ctx, in.ID) })
+		func(ctx context.Context, in RemoveInput) (job.Job, error) { return a.Remove(ctx, in.ID) })
 	add(srv, "verdicts", "List verdicts newest first with every check's evidence, the matched Claude sessions and any correction. Use it to explain why a run failed."+dataNote,
-		func(ctx context.Context, in VerdictsInput) (any, error) {
+		func(ctx context.Context, in VerdictsInput) ([]app.VerdictView, error) {
 			back, err := since(in.Since, 7*24*time.Hour)
 			if err != nil {
 				return nil, err
@@ -150,38 +154,45 @@ func New(a app.App) *sdk.Server {
 			return a.Verdicts(ctx, app.VerdictFilter{JobID: in.JobID, Since: a.Now().Add(-back), Verdict: ledger.Verdict(in.Verdict), Limit: limit})
 		})
 	add(srv, "correct", "Override a wrong verdict with the owner's reason. The original verdict stays in the ledger.",
-		func(ctx context.Context, in CorrectInput) (any, error) {
+		func(ctx context.Context, in CorrectInput) (ledger.Entry, error) {
 			return a.Correct(ctx, ledger.Correction{VerdictID: in.VerdictID, Verdict: ledger.Verdict(in.Verdict), Reason: in.Reason, By: in.By})
 		})
 	add(srv, "report", "The summary for the owner: verdict counts, problems with their reason, silent jobs and export lag. Deliver it through the owner's own messenger connection, rindcut doesn't send messages."+dataNote,
-		func(ctx context.Context, in ReportInput) (any, error) {
+		func(ctx context.Context, in ReportInput) (app.Report, error) {
 			back, err := since(in.Since, 24*time.Hour)
 			if err != nil {
-				return nil, err
+				return app.Report{}, err
 			}
 			return a.Report(ctx, back)
 		})
 	add(srv, "exporter_set", "Replace the settings of one exporter and test them with one send right away: otlp sends verdicts as traces to Langfuse, Phoenix or any OTLP backend, langfuse-score adds Langfuse scores, nodloop hands outcomes to nodloop. Keys come back masked. The test field says ok, off, or what went wrong.",
-		func(ctx context.Context, in ExporterInput) (any, error) {
+		func(ctx context.Context, in ExporterInput) (app.ExporterResult, error) {
 			raw, err := json.Marshal(in.Settings)
 			if err != nil {
-				return nil, err
+				return app.ExporterResult{}, err
 			}
 			return a.SetExporter(ctx, in.Name, raw)
 		})
 	add(srv, "exporter_list", "Show exporter settings with keys masked.",
-		func(_ context.Context, _ Empty) (any, error) {
+		func(_ context.Context, _ Empty) (export.Settings, error) {
 			s, err := a.Settings()
 			return s.Masked(), err
 		})
 	add(srv, "status", "rindcut version, home, whether the checker is scheduled and when it last ran.",
-		func(ctx context.Context, _ Empty) (any, error) { return a.Status(ctx) })
+		func(ctx context.Context, _ Empty) (app.Status, error) { return a.Status(ctx) })
 	return srv
 }
 
-func add[In any](srv *sdk.Server, name, description string, h func(context.Context, In) (any, error)) {
-	sdk.AddTool(srv, &sdk.Tool{Name: name, Description: description},
-		func(ctx context.Context, _ *sdk.CallToolRequest, in In) (*sdk.CallToolResult, any, error) {
+func add[In, Out any](srv *sdk.Server, name, description string, h func(context.Context, In) (Out, error)) {
+	schema, err := jsonschema.For[Out](&jsonschema.ForOptions{TypeSchemas: map[reflect.Type]*jsonschema.Schema{
+		reflect.TypeFor[check.Duration]():  {Type: "string"},
+		reflect.TypeFor[json.RawMessage](): {},
+	}})
+	if err != nil {
+		panic(fmt.Sprintf("tool %s output schema: %v", name, err))
+	}
+	sdk.AddTool(srv, &sdk.Tool{Name: name, Description: description, OutputSchema: schema},
+		func(ctx context.Context, _ *sdk.CallToolRequest, in In) (*sdk.CallToolResult, Out, error) {
 			out, err := h(ctx, in)
 			return nil, out, err
 		})

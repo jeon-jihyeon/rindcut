@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -31,21 +32,43 @@ func runHTTP(ctx context.Context, s Spec, env Env) Result {
 		return r
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
 	observed["elapsed_ms"] = time.Since(start).Milliseconds()
 	observed["status"] = resp.StatusCode
-	text, cut := head(body, keptBodyText)
+	limitReached := len(body) > maxBody
+	if limitReached {
+		body = body[:maxBody]
+	}
+	observed["bytes_read"] = len(body)
+	observed["body_limit"] = maxBody
+	observed["limit_reached"] = limitReached
+	contains := env.expand(s.Contains)
+	match := -1
+	if contains != "" {
+		match = strings.Index(string(body), contains)
+	}
+	observed["match_offset"] = match
+	offset := 0
+	if match >= 0 {
+		observed["match"] = contains
+		observed["match_bytes"] = len(contains)
+		offset = max(0, match-keptBodyText/2)
+		for offset > 0 && !utf8.RuneStart(body[offset]) {
+			offset--
+		}
+	}
+	text, cut := head(body[offset:], keptBodyText)
 	observed["body"] = text
-	r.Truncated = cut
+	observed["body_offset"] = offset
+	r.Truncated = cut || offset > 0 || limitReached
 	if err != nil {
 		r.Status, r.Message = StatusError, fmt.Sprintf("reading %s broke off: %v", target, err)
 		return r
 	}
-	contains := env.expand(s.Contains)
 	switch {
 	case resp.StatusCode != s.status():
 		r.Status, r.Message = StatusFail, fmt.Sprintf("%s answered %d, expected %d", target, resp.StatusCode, s.status())
-	case contains != "" && !strings.Contains(string(body), contains):
+	case contains != "" && match < 0:
 		r.Status, r.Message = StatusFail, fmt.Sprintf("%s doesn't contain %q", target, contains)
 	default:
 		r.Status, r.Message = StatusPass, fmt.Sprintf("%s answered %d", target, resp.StatusCode)

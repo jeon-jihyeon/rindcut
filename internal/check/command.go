@@ -43,7 +43,10 @@ func runCommand(ctx context.Context, s Spec, env Env) Result {
 	observed["stderr"] = stderr.String()
 	r.Truncated = stdout.cut || stderr.cut
 	// ExitCode is -1 when the process never started or was killed by a signal
-	code := cmd.ProcessState.ExitCode()
+	code := -1
+	if cmd.ProcessState != nil {
+		code = cmd.ProcessState.ExitCode()
+	}
 	observed["exit_code"] = code
 	var exitErr *exec.ExitError
 	switch {

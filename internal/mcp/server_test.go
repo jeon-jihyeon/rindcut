@@ -16,12 +16,14 @@ import (
 	"github.com/jeon-jihyeon/rindcut/internal/app"
 	"github.com/jeon-jihyeon/rindcut/internal/home"
 	"github.com/jeon-jihyeon/rindcut/internal/judge"
+	"github.com/jeon-jihyeon/rindcut/internal/ledger"
 	"github.com/jeon-jihyeon/rindcut/internal/mcp"
 )
 
 type harness struct {
 	sess   *sdk.ClientSession
 	folder string
+	app    app.App
 }
 
 func start(t *testing.T) *harness {
@@ -43,6 +45,7 @@ func start(t *testing.T) *harness {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sess.Close() })
 	h.sess = sess
+	h.app = a
 	return h
 }
 
@@ -82,8 +85,18 @@ func TestTools(t *testing.T) {
 	res, err := h.sess.ListTools(context.Background(), nil)
 	require.NoError(t, err)
 	names := []string{}
+	types := map[string]any{
+		"job_preview": "object", "job_save": "object", "job_list": []any{"null", "array"}, "job_remove": "object", "verdicts": []any{"null", "array"},
+		"correct": "object", "report": "object", "exporter_set": "object", "exporter_list": "object", "status": "object",
+	}
 	for _, tl := range res.Tools {
 		names = append(names, tl.Name)
+		require.NotNil(t, tl.OutputSchema, tl.Name)
+		b, err := json.Marshal(tl.OutputSchema)
+		require.NoError(t, err)
+		var schema map[string]any
+		require.NoError(t, json.Unmarshal(b, &schema))
+		assert.Equal(t, types[tl.Name], schema["type"], tl.Name)
 	}
 	assert.ElementsMatch(t, []string{"job_preview", "job_save", "job_list", "job_remove", "verdicts", "correct", "report",
 		"exporter_set", "exporter_list", "status"}, names)
@@ -179,4 +192,47 @@ func TestCorrectAndExporters(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, string(b), "abcdefghij")
 	assert.True(t, strings.Contains(string(b), "langfuse-score"))
+}
+
+func TestStructuredCorrection(t *testing.T) {
+	t.Parallel()
+	h := start(t)
+	entry, err := h.app.Ledger().Append(context.Background(), ledger.KindVerdict,
+		ledger.Judgment{JobID: "report", Verdict: ledger.VerdictFail})
+	require.NoError(t, err)
+	res, err := h.sess.CallTool(context.Background(), &sdk.CallToolParams{Name: "correct",
+		Arguments: map[string]any{"verdict_id": entry.ID, "verdict": "pass", "reason": "verified output", "by": "owner"}})
+	require.NoError(t, err)
+	require.False(t, res.IsError)
+	require.NotNil(t, res.StructuredContent)
+	b, err := json.Marshal(res.StructuredContent)
+	require.NoError(t, err)
+	var got struct {
+		Kind string
+		Data ledger.Correction
+	}
+	require.NoError(t, json.Unmarshal(b, &got))
+	assert.Equal(t, "correction", got.Kind)
+	assert.Equal(t, entry.ID, got.Data.VerdictID)
+	assert.Equal(t, ledger.VerdictPass, got.Data.Verdict)
+}
+
+func TestStructuredListsAndRemoval(t *testing.T) {
+	t.Parallel()
+	h := start(t)
+	_, msg := h.call(t, "job_preview", h.jobArgs(nil))
+	require.Empty(t, msg)
+	saved, msg := h.call(t, "job_save", h.jobArgs(map[string]any{"confirmed": true}))
+	require.Empty(t, msg)
+	job, ok := saved["job"].(map[string]any)
+	require.True(t, ok)
+	id, ok := job["id"].(string)
+	require.True(t, ok)
+	rows, msg := h.call(t, "verdicts", map[string]any{})
+	require.Empty(t, msg)
+	assert.Empty(t, rows["list"])
+	removed, msg := h.call(t, "job_remove", map[string]any{"id": id})
+	require.Empty(t, msg)
+	assert.Equal(t, id, removed["id"])
+	assert.Equal(t, true, removed["removed"])
 }
