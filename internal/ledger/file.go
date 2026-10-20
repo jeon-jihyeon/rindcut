@@ -46,7 +46,7 @@ func (l *Ledger) Append(ctx context.Context, kind Kind, data any) (Entry, error)
 	}
 	at := l.now().UTC()
 	e := Entry{ID: newID(at), Kind: kind, At: at, Version: l.version, Data: raw}
-	line, err := json.Marshal(e)
+	e, line, err := encodeEntry(e, data)
 	if err != nil {
 		return Entry{}, err
 	}

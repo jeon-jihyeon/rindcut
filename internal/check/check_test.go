@@ -159,6 +159,8 @@ func TestCommand(t *testing.T) {
 		{name: "exit 0 in the job folder", spec: check.Spec{Kind: check.KindCommand, Run: "test -s rows.txt"}, want: want{status: check.StatusPass}},
 		{name: "exit 1", spec: check.Spec{Kind: check.KindCommand, Run: "grep -q missing rows.txt"}, want: want{status: check.StatusFail}},
 		{name: "template and env", spec: check.Spec{Kind: check.KindCommand, Run: `test "{{date}}" = "$RINDCUT_DATE"`}, want: want{status: check.StatusPass}},
+		{name: "not executable", spec: check.Spec{Kind: check.KindCommand, Run: "exit 126"},
+			want: want{status: check.StatusError}},
 		{name: "not found", spec: check.Spec{Kind: check.KindCommand, Run: "no-such-command-rindcut"}, want: want{status: check.StatusError}},
 		{name: "timeout kills children", spec: check.Spec{Kind: check.KindCommand, Run: "sleep 30 & sleep 30", Timeout: check.Duration(100 * time.Millisecond)}, want: want{status: check.StatusError}},
 		{name: "long output is cut", spec: check.Spec{Kind: check.KindCommand, Run: "yes 가 | head -c 20000"}, want: want{status: check.StatusPass, cut: true}},
@@ -184,4 +186,12 @@ func TestDurationJSON(t *testing.T) {
 	b, err := json.Marshal(s)
 	require.NoError(t, err)
 	assert.Contains(t, string(b), `"timeout":"1m30s"`)
+}
+
+func TestCommandUnavailableFolder(t *testing.T) {
+	t.Parallel()
+	r := check.Run(context.Background(), check.Spec{Kind: check.KindCommand, Run: "true"},
+		envIn(filepath.Join(t.TempDir(), "missing")))
+	assert.Equal(t, check.StatusError, r.Status)
+	assert.Equal(t, -1, r.Observed["exit_code"])
 }
