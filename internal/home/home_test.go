@@ -20,8 +20,8 @@ func TestResolve(t *testing.T) {
 		want home.Dir
 		bad  bool
 	}{
-		{name: "under HOME", env: map[string]string{"HOME": "/Users/owner"}, want: "/Users/owner/.rindcut"},
-		{name: "RINDCUT_HOME wins", env: map[string]string{"HOME": "/Users/owner", home.Env: "/data/rc/"}, want: "/data/rc"},
+		{name: "under HOME", env: map[string]string{"HOME": "/home/ann"}, want: "/home/ann/.rindcut"},
+		{name: "RINDCUT_HOME wins", env: map[string]string{"HOME": "/home/ann", home.Env: "/data/rc/"}, want: "/data/rc"},
 		{name: "RINDCUT_HOME without HOME", env: map[string]string{home.Env: "/data/rc"}, want: "/data/rc"},
 		{name: "neither", env: map[string]string{}, bad: true},
 	}

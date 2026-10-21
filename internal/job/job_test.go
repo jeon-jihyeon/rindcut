@@ -14,9 +14,9 @@ import (
 
 func valid() job.Job {
 	return job.Job{
-		ID: "price-watch", Name: "가격 수집", Schedule: "0 9 * * *", Timezone: "Asia/Seoul",
+		ID: "price-watch", Name: "가격 수집", Schedule: "0 9 * * *", Timezone: "America/New_York",
 		Grace: check.Duration(30 * time.Minute), Evidence: job.EvidenceSession,
-		Folder: "/Users/owner/price", Marker: "오늘 가격 수집해줘",
+		Folder: "/home/ann/price", Marker: "오늘 가격 수집해줘",
 		Checks:   []check.Spec{{Kind: check.KindFile, Path: "out/{{date}}.csv"}},
 		Revision: 1,
 	}
@@ -49,7 +49,7 @@ func TestValidate(t *testing.T) {
 		{name: "bad hour", edit: func(j *job.Job) { j.Schedule = "0 24 * * *" }, bad: "hour"},
 		{name: "zero step", edit: func(j *job.Job) { j.Schedule = "*/0 * * * *" }, bad: "step"},
 		{name: "backwards range", edit: func(j *job.Job) { j.Schedule = "0 9 * * fri-mon" }, bad: "backwards"},
-		{name: "bad zone", edit: func(j *job.Job) { j.Timezone = "Seoul" }, bad: "timezone"},
+		{name: "bad zone", edit: func(j *job.Job) { j.Timezone = "New York" }, bad: "timezone"},
 		{name: "empty zone", edit: func(j *job.Job) { j.Timezone = "" }, bad: "timezone"},
 		{name: "short grace", edit: func(j *job.Job) { j.Grace = check.Duration(time.Second) }, bad: "grace"},
 		{name: "long grace", edit: func(j *job.Job) { j.Grace = check.Duration(25 * time.Hour) }, bad: "grace"},
@@ -114,7 +114,7 @@ func slotTimes(t *testing.T, j job.Job, from, to time.Time) []string {
 func TestSlotsCount(t *testing.T) {
 	t.Parallel()
 	j := valid()
-	seoul := zone(t, "Asia/Seoul")
+	j.Timezone = "UTC"
 	tcs := []struct {
 		name  string
 		year  int
@@ -126,7 +126,7 @@ func TestSlotsCount(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			from := time.Date(tc.year, 1, 1, 0, 0, 0, 0, seoul)
+			from := time.Date(tc.year, 1, 1, 0, 0, 0, 0, time.UTC)
 			got := slotTimes(t, j, from, from.AddDate(1, 0, 0))
 			require.Len(t, got, tc.count)
 			assert.Equal(t, from.Add(9*time.Hour).Format(time.RFC3339), got[0])
@@ -193,12 +193,12 @@ func TestSlotsDST(t *testing.T) {
 func TestSlotWindowAndKey(t *testing.T) {
 	t.Parallel()
 	j := valid()
-	from := time.Date(2026, 10, 8, 0, 0, 0, 0, zone(t, "Asia/Seoul"))
+	from := time.Date(2026, 10, 8, 0, 0, 0, 0, zone(t, "America/New_York"))
 	slots, err := j.Slots(from, from.AddDate(0, 0, 1))
 	require.NoError(t, err)
 	require.Len(t, slots, 1)
 	assert.Equal(t, 30*time.Minute, slots[0].End.Sub(slots[0].At))
-	assert.Equal(t, "price-watch@2026-10-08T09:00:00+09:00", slots[0].Key())
+	assert.Equal(t, "price-watch@2026-10-08T09:00:00-04:00", slots[0].Key())
 }
 
 func TestRevisions(t *testing.T) {

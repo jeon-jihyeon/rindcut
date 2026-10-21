@@ -38,7 +38,7 @@ type JobInput struct {
 	ID       string       `json:"id,omitempty" jsonschema:"existing job id to change it, empty to make a new id from the name"`
 	Name     string       `json:"name" jsonschema:"what the owner calls the job, any language"`
 	Schedule string       `json:"schedule" jsonschema:"5-field cron: minute hour day-of-month month day-of-week, like 0 9 * * mon-fri"`
-	Timezone string       `json:"timezone" jsonschema:"IANA zone like Asia/Seoul"`
+	Timezone string       `json:"timezone" jsonschema:"IANA zone like America/New_York"`
 	Grace    string       `json:"grace" jsonschema:"how long the run may take after its scheduled time, Go duration from 1m to 24h, like 30m"`
 	Evidence string       `json:"evidence" jsonschema:"session when the job runs as a local Claude session (Desktop scheduled task, cron claude -p, /loop), none for cloud Cowork or Routines"`
 	Folder   string       `json:"folder,omitempty" jsonschema:"session jobs: absolute working folder of the scheduled session"`

@@ -17,7 +17,7 @@ import (
 	"github.com/jeon-jihyeon/rindcut/internal/check"
 )
 
-var slot = time.Date(2026, 10, 8, 9, 0, 0, 0, time.FixedZone("KST", 9*3600))
+var slot = time.Date(2026, 10, 8, 9, 0, 0, 0, time.FixedZone("EDT", -4*3600))
 
 func envIn(dir string) check.Env {
 	return check.Env{Slot: slot, JobID: "price-watch", Folder: dir, UserHome: dir, Dir: dir}

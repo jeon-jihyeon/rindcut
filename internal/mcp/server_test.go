@@ -29,7 +29,7 @@ type harness struct {
 func start(t *testing.T) *harness {
 	t.Helper()
 	h := &harness{folder: t.TempDir()}
-	now := time.Date(2026, 10, 8, 9, 10, 0, 0, time.FixedZone("KST", 9*3600))
+	now := time.Date(2026, 10, 8, 9, 10, 0, 0, time.FixedZone("EDT", -4*3600))
 	userHome := t.TempDir()
 	a := app.App{
 		Home: home.Dir(t.TempDir()), UserHome: userHome, Now: func() time.Time { return now }, Version: "test", Warn: os.Stderr,
@@ -69,7 +69,7 @@ func (h *harness) call(t *testing.T, name string, args map[string]any) (map[stri
 
 func (h *harness) jobArgs(extra map[string]any) map[string]any {
 	args := map[string]any{
-		"name": "가격 수집", "schedule": "0 9 * * *", "timezone": "Asia/Seoul", "grace": "30m",
+		"name": "가격 수집", "schedule": "0 9 * * *", "timezone": "America/New_York", "grace": "30m",
 		"evidence": "session", "folder": h.folder, "marker": "오늘 가격 수집해줘",
 		"checks": []any{map[string]any{"kind": "file", "path": "out/{{date}}.csv"}},
 	}

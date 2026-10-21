@@ -26,7 +26,7 @@ import (
 	"github.com/jeon-jihyeon/rindcut/internal/lock"
 )
 
-var kst = time.FixedZone("KST", 9*3600)
+var edt = time.FixedZone("EDT", -4*3600)
 
 type world struct {
 	a      app.App
@@ -39,7 +39,7 @@ type world struct {
 
 func newWorld(t *testing.T) world {
 	t.Helper()
-	now := time.Date(2026, 10, 8, 9, 10, 0, 0, kst)
+	now := time.Date(2026, 10, 8, 9, 10, 0, 0, edt)
 	refuse := false
 	w := world{now: &now, folder: t.TempDir(), warn: &bytes.Buffer{}, refuse: &refuse}
 	userHome := t.TempDir()
@@ -59,7 +59,7 @@ func newWorld(t *testing.T) world {
 
 func (w world) job() job.Job {
 	return job.Job{
-		Name: "가격 수집", Schedule: "0 9 * * *", Timezone: "Asia/Seoul", Grace: check.Duration(30 * time.Minute),
+		Name: "가격 수집", Schedule: "0 9 * * *", Timezone: "America/New_York", Grace: check.Duration(30 * time.Minute),
 		Evidence: job.EvidenceSession, Folder: w.folder, Marker: "오늘 가격 수집해줘",
 		Checks: []check.Spec{{Kind: check.KindFile, Path: "out/{{date}}.csv"}},
 	}
@@ -161,7 +161,7 @@ func TestRemoveAndJobs(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, list, 1)
 	require.NotNil(t, list[0].NextSlot)
-	assert.Equal(t, "2026-10-09T09:00:00+09:00", list[0].NextSlot.Format(time.RFC3339))
+	assert.Equal(t, "2026-10-09T09:00:00-04:00", list[0].NextSlot.Format(time.RFC3339))
 
 	removed, err := w.a.Remove(ctx, saved.ID)
 	require.NoError(t, err)
@@ -198,10 +198,10 @@ func TestReport(t *testing.T) {
 		settings string
 		want     []string
 	}{
-		{name: "judged slot is not silent", at: time.Date(2026, 10, 9, 10, 0, 0, 0, kst), verdict: true, want: []string{}},
-		{name: "unjudged closed slot is silent", at: time.Date(2026, 10, 9, 10, 0, 0, 0, kst), want: []string{"job"}},
-		{name: "a slot within two ticks of closing isn't silent yet", at: time.Date(2026, 10, 9, 9, 35, 0, 0, kst), want: []string{}},
-		{name: "broken exporter settings still give a report", at: time.Date(2026, 10, 9, 10, 0, 0, 0, kst), verdict: true, settings: "{", want: []string{}},
+		{name: "judged slot is not silent", at: time.Date(2026, 10, 9, 10, 0, 0, 0, edt), verdict: true, want: []string{}},
+		{name: "unjudged closed slot is silent", at: time.Date(2026, 10, 9, 10, 0, 0, 0, edt), want: []string{"job"}},
+		{name: "a slot within two ticks of closing isn't silent yet", at: time.Date(2026, 10, 9, 9, 35, 0, 0, edt), want: []string{}},
+		{name: "broken exporter settings still give a report", at: time.Date(2026, 10, 9, 10, 0, 0, 0, edt), verdict: true, settings: "{", want: []string{}},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -209,7 +209,7 @@ func TestReport(t *testing.T) {
 			w := newWorld(t)
 			saved := w.saved(t, w.job())
 			if tc.verdict {
-				w.verdict(t, saved.ID, time.Date(2026, 10, 9, 9, 0, 0, 0, kst), ledger.VerdictPass)
+				w.verdict(t, saved.ID, time.Date(2026, 10, 9, 9, 0, 0, 0, edt), ledger.VerdictPass)
 			}
 			if tc.settings != "" {
 				require.NoError(t, os.WriteFile(w.a.Home.Path("exporters.json"), []byte(tc.settings), 0o600))
@@ -231,7 +231,7 @@ func TestVerdictsAndCorrect(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	ctx := context.Background()
-	day := func(d int) time.Time { return time.Date(2026, 10, d, 9, 0, 0, 0, kst) }
+	day := func(d int) time.Time { return time.Date(2026, 10, d, 9, 0, 0, 0, edt) }
 	w.verdict(t, "a", day(5), ledger.VerdictPass)
 	wrong := w.verdict(t, "a", day(6), ledger.VerdictFail)
 	w.verdict(t, "b", day(7), ledger.VerdictMissed)
@@ -309,7 +309,7 @@ func TestSetExporter(t *testing.T) {
 
 func transcript(t *testing.T, path, cwd, prompt string) {
 	t.Helper()
-	line, err := json.Marshal(map[string]any{"type": "user", "sessionId": "s", "cwd": cwd, "timestamp": "2026-10-08T00:01:00Z",
+	line, err := json.Marshal(map[string]any{"type": "user", "sessionId": "s", "cwd": cwd, "timestamp": "2026-10-08T13:01:00Z",
 		"message": map[string]any{"role": "user", "content": prompt}})
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, append(line, '\n'), 0o600))
@@ -379,7 +379,7 @@ func TestTickLockAndStatus(t *testing.T) {
 	unlock()
 
 	w.saved(t, w.job())
-	*w.now = time.Date(2026, 10, 9, 9, 31, 0, 0, kst)
+	*w.now = time.Date(2026, 10, 9, 9, 31, 0, 0, edt)
 	r, err := w.a.Tick(ctx)
 	require.NoError(t, err)
 	assert.False(t, r.Busy)
@@ -401,7 +401,7 @@ func TestExportFromStart(t *testing.T) {
 	ctx := context.Background()
 	_, err := w.a.SetExporter(ctx, "otlp", json.RawMessage(`{"enabled":true,"endpoint":"`+srv.URL+`"}`))
 	require.NoError(t, err)
-	w.verdict(t, "a", time.Date(2026, 10, 8, 9, 0, 0, 0, kst), ledger.VerdictPass)
+	w.verdict(t, "a", time.Date(2026, 10, 8, 9, 0, 0, 0, edt), ledger.VerdictPass)
 
 	tcs := []struct {
 		name      string

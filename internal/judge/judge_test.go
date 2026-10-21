@@ -20,7 +20,7 @@ import (
 	"github.com/jeon-jihyeon/rindcut/internal/ledger"
 )
 
-var kst = time.FixedZone("KST", 9*3600)
+var edt = time.FixedZone("EDT", -4*3600)
 
 func TestDecide(t *testing.T) {
 	t.Parallel()
@@ -55,7 +55,7 @@ func TestDecide(t *testing.T) {
 
 func baseJob(folder string) job.Job {
 	return job.Job{
-		ID: "price-watch", Name: "가격 수집", Schedule: "0 9 * * *", Timezone: "Asia/Seoul",
+		ID: "price-watch", Name: "가격 수집", Schedule: "0 9 * * *", Timezone: "America/New_York",
 		Grace: check.Duration(30 * time.Minute), Evidence: job.EvidenceSession,
 		Folder: folder, Marker: "오늘 가격 수집해줘",
 		Checks:   []check.Spec{{Kind: check.KindFile, Path: "out/{{date}}.csv"}},
@@ -70,7 +70,7 @@ func TestMatches(t *testing.T) {
 	require.NoError(t, os.Symlink(dir, link))
 	other := t.TempDir()
 	j := baseJob(dir)
-	slots, err := j.Slots(time.Date(2026, 10, 8, 0, 0, 0, 0, kst), time.Date(2026, 10, 9, 0, 0, 0, 0, kst))
+	slots, err := j.Slots(time.Date(2026, 10, 8, 0, 0, 0, 0, edt), time.Date(2026, 10, 9, 0, 0, 0, 0, edt))
 	require.NoError(t, err)
 	s := slots[0]
 	tcs := []struct {
@@ -149,7 +149,7 @@ func (f *fixture) output(day string) {
 	require.NoError(f.t, os.MkdirAll(dir, 0o700))
 	path := filepath.Join(dir, day+".csv")
 	require.NoError(f.t, os.WriteFile(path, []byte("row"), 0o600))
-	at, err := time.Parse(time.RFC3339, day+"T09:05:00+09:00")
+	at, err := time.Parse(time.RFC3339, day+"T09:05:00-04:00")
 	require.NoError(f.t, err)
 	require.NoError(f.t, os.Chtimes(path, at, at))
 }
@@ -185,7 +185,7 @@ func summary(t *testing.T, r judge.TickResult) []string {
 	for _, e := range r.Verdicts {
 		var j ledger.Judgment
 		require.NoError(t, e.Decode(&j))
-		out = append(out, fmt.Sprintf("%s r%d %s %v", j.Slot.In(kst).Format("01-02T15"), j.JobRevision, j.Verdict, j.Sessions))
+		out = append(out, fmt.Sprintf("%s r%d %s %v", j.Slot.In(edt).Format("01-02T15"), j.JobRevision, j.Verdict, j.Sessions))
 	}
 	return out
 }
@@ -193,7 +193,7 @@ func summary(t *testing.T, r judge.TickResult) []string {
 func TestTick(t *testing.T) {
 	t.Parallel()
 	start := func(day string) time.Time {
-		at, _ := time.Parse(time.RFC3339, day+"T09:01:00+09:00")
+		at, _ := time.Parse(time.RFC3339, day+"T09:01:00-04:00")
 		return at
 	}
 	tcs := []struct {
@@ -205,66 +205,66 @@ func TestTick(t *testing.T) {
 		{
 			name: "fills a gap once per slot",
 			setup: func(f *fixture) {
-				f.save(baseJob(f.folder), time.Date(2026, 10, 5, 12, 0, 0, 0, kst))
+				f.save(baseJob(f.folder), time.Date(2026, 10, 5, 12, 0, 0, 0, edt))
 				f.session(ledger.Session{SessionID: "s6", StartedAt: start("2026-10-06"), FirstPrompt: "오늘 가격 수집해줘"})
 				f.output("2026-10-06")
 				f.session(ledger.Session{SessionID: "s7", StartedAt: start("2026-10-07"), FirstPrompt: "오늘 가격 수집해줘"})
 			},
-			at:   time.Date(2026, 10, 8, 9, 31, 0, 0, kst),
+			at:   time.Date(2026, 10, 8, 9, 31, 0, 0, edt),
 			want: []string{"10-06T09 r1 pass [s6]", "10-07T09 r1 fail [s7]", "10-08T09 r1 missed []"},
 		},
 		{
 			name:  "waits for the grace",
-			setup: func(f *fixture) { f.save(baseJob(f.folder), time.Date(2026, 10, 7, 12, 0, 0, 0, kst)) },
-			at:    time.Date(2026, 10, 8, 9, 29, 0, 0, kst),
+			setup: func(f *fixture) { f.save(baseJob(f.folder), time.Date(2026, 10, 7, 12, 0, 0, 0, edt)) },
+			at:    time.Date(2026, 10, 8, 9, 29, 0, 0, edt),
 			want:  []string{},
 		},
 		{
 			name: "uses the revision in force",
 			setup: func(f *fixture) {
 				r1 := baseJob(f.folder)
-				f.save(r1, time.Date(2026, 10, 6, 12, 0, 0, 0, kst))
+				f.save(r1, time.Date(2026, 10, 6, 12, 0, 0, 0, edt))
 				r2 := r1
 				r2.Revision, r2.Schedule = 2, "0 10 * * *"
-				f.save(r2, time.Date(2026, 10, 7, 9, 45, 0, 0, kst))
+				f.save(r2, time.Date(2026, 10, 7, 9, 45, 0, 0, edt))
 			},
-			at:   time.Date(2026, 10, 8, 11, 0, 0, 0, kst),
+			at:   time.Date(2026, 10, 8, 11, 0, 0, 0, edt),
 			want: []string{"10-07T09 r1 missed []", "10-07T10 r2 missed []", "10-08T10 r2 missed []"},
 		},
 		{
 			name: "stops at removal and the 7 day lookback",
 			setup: func(f *fixture) {
 				r1 := baseJob(f.folder)
-				f.save(r1, time.Date(2026, 9, 1, 12, 0, 0, 0, kst))
+				f.save(r1, time.Date(2026, 9, 1, 12, 0, 0, 0, edt))
 				r2 := r1
 				r2.Revision, r2.Removed = 2, true
-				f.save(r2, time.Date(2026, 10, 4, 12, 0, 0, 0, kst))
+				f.save(r2, time.Date(2026, 10, 4, 12, 0, 0, 0, edt))
 			},
-			at:   time.Date(2026, 10, 8, 12, 0, 0, 0, kst),
+			at:   time.Date(2026, 10, 8, 12, 0, 0, 0, edt),
 			want: []string{"10-02T09 r1 missed []", "10-03T09 r1 missed []", "10-04T09 r1 missed []"},
 		},
 		{
 			name: "backfills a killed session in the job folder only",
 			setup: func(f *fixture) {
-				f.save(baseJob(f.folder), time.Date(2026, 10, 7, 12, 0, 0, 0, kst))
+				f.save(baseJob(f.folder), time.Date(2026, 10, 7, 12, 0, 0, 0, edt))
 				f.transcript("abc",
-					map[string]any{"type": "user", "isMeta": true, "sessionId": "abc", "cwd": f.folder, "timestamp": "2026-10-08T00:01:00Z",
+					map[string]any{"type": "user", "isMeta": true, "sessionId": "abc", "cwd": f.folder, "timestamp": "2026-10-08T13:01:00Z",
 						"message": map[string]any{"role": "user", "content": "<local-command-caveat>x"}},
-					userLine("abc", f.folder, "2026-10-08T00:01:01Z", "오늘 가격 수집해줘\n시트에 넣어"))
-				f.transcript("elsewhere", userLine("elsewhere", "/somewhere/else", "2026-10-08T00:01:01Z", "오늘 가격 수집해줘"))
+					userLine("abc", f.folder, "2026-10-08T13:01:01Z", "오늘 가격 수집해줘\n시트에 넣어"))
+				f.transcript("elsewhere", userLine("elsewhere", "/somewhere/else", "2026-10-08T13:01:01Z", "오늘 가격 수집해줘"))
 			},
-			at:   time.Date(2026, 10, 8, 9, 31, 0, 0, kst),
+			at:   time.Date(2026, 10, 8, 9, 31, 0, 0, edt),
 			want: []string{"10-08T09 r1 fail [abc]"},
 		},
 		{
 			name: "a complete backfill replaces an incomplete hook record",
 			setup: func(f *fixture) {
-				f.save(baseJob(f.folder), time.Date(2026, 10, 7, 12, 0, 0, 0, kst))
+				f.save(baseJob(f.folder), time.Date(2026, 10, 7, 12, 0, 0, 0, edt))
 				f.session(ledger.Session{SessionID: "abc", Source: ledger.SourceHook})
-				f.transcript("abc", userLine("abc", f.folder, "2026-10-08T00:01:01Z", "오늘 가격 수집해줘"))
+				f.transcript("abc", userLine("abc", f.folder, "2026-10-08T13:01:01Z", "오늘 가격 수집해줘"))
 				f.output("2026-10-08")
 			},
-			at:   time.Date(2026, 10, 8, 9, 31, 0, 0, kst),
+			at:   time.Date(2026, 10, 8, 9, 31, 0, 0, edt),
 			want: []string{"10-08T09 r1 pass [abc]"},
 		},
 	}
@@ -282,7 +282,7 @@ func TestTick(t *testing.T) {
 func TestProbe(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	f.now = time.Date(2026, 10, 8, 9, 10, 0, 0, kst)
+	f.now = time.Date(2026, 10, 8, 9, 10, 0, 0, edt)
 	f.output("2026-10-08")
 	e, err := f.j.Probe(context.Background(), baseJob(f.folder), f.now, "fp")
 	require.NoError(t, err)
@@ -290,10 +290,10 @@ func TestProbe(t *testing.T) {
 	var j ledger.Judgment
 	require.NoError(t, e.Decode(&j))
 	assert.Equal(t, ledger.Judgment{
-		JobID: "price-watch", JobRevision: 1, SlotKey: "price-watch@2026-10-08T09:00:00+09:00",
+		JobID: "price-watch", JobRevision: 1, SlotKey: "price-watch@2026-10-08T09:00:00-04:00",
 		Verdict: ledger.VerdictPass, Trigger: judge.TriggerCheck, Fingerprint: "fp",
 	}, ledger.Judgment{JobID: j.JobID, JobRevision: j.JobRevision, SlotKey: j.SlotKey, Verdict: j.Verdict, Trigger: j.Trigger, Fingerprint: j.Fingerprint})
-	assert.Empty(t, f.tick(time.Date(2026, 10, 8, 9, 31, 0, 0, kst)).Verdicts, "a probe of an unsaved job must not create slots")
+	assert.Empty(t, f.tick(time.Date(2026, 10, 8, 9, 31, 0, 0, edt)).Verdicts, "a probe of an unsaved job must not create slots")
 }
 
 func TestInstall(t *testing.T) {
@@ -320,7 +320,7 @@ func TestInstall(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			var ran []string
-			in := judge.Installer{Binary: "/Users/o/.rindcut/bin/rindcut", Home: "/Users/o/.rindcut", UserHome: t.TempDir(), GOOS: tc.goos, UID: 501,
+			in := judge.Installer{Binary: "/home/ann/.rindcut/bin/rindcut", Home: "/home/ann/.rindcut", UserHome: t.TempDir(), GOOS: tc.goos, UID: 501,
 				Exec: func(name string, args ...string) error {
 					ran = append(ran, name+" "+strings.Join(args, " "))
 					if tc.failOn != "" && len(args) > 1 && (args[0] == tc.failOn || args[1] == tc.failOn) {
@@ -340,14 +340,14 @@ func TestInstall(t *testing.T) {
 
 func TestScheduleFiles(t *testing.T) {
 	t.Parallel()
-	in := judge.Installer{Binary: "/Users/o/.rindcut/bin/rindcut", Home: "/Users/o/.rindcut", UserHome: t.TempDir(), UID: 501,
+	in := judge.Installer{Binary: "/home/ann/.rindcut/bin/rindcut", Home: "/home/ann/.rindcut", UserHome: t.TempDir(), UID: 501,
 		Exec: func(string, ...string) error { return nil }}
 	plist := string(in.Plist())
-	for _, want := range []string{"<string>/Users/o/.rindcut/bin/rindcut</string><string>tick</string>", "<integer>300</integer>", "<key>RunAtLoad</key><true/>"} {
+	for _, want := range []string{"<string>/home/ann/.rindcut/bin/rindcut</string><string>tick</string>", "<integer>300</integer>", "<key>RunAtLoad</key><true/>"} {
 		assert.Contains(t, plist, want)
 	}
 	service, timer := in.Units()
-	assert.Contains(t, string(service), `Environment="RINDCUT_HOME=/Users/o/.rindcut"`)
+	assert.Contains(t, string(service), `Environment="RINDCUT_HOME=/home/ann/.rindcut"`)
 	assert.Contains(t, string(timer), "Persistent=true")
 
 	in.GOOS = "linux"

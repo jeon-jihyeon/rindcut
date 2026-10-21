@@ -97,7 +97,7 @@ func (j Job) validateTiming() error {
 		return err
 	}
 	if _, err := time.LoadLocation(j.Timezone); err != nil || j.Timezone == "" {
-		return fmt.Errorf("timezone %q must be an IANA name like Asia/Seoul", j.Timezone)
+		return fmt.Errorf("timezone %q must be an IANA name like America/New_York", j.Timezone)
 	}
 	if g := time.Duration(j.Grace); g < minGrace || g > maxGrace {
 		return fmt.Errorf("grace %s must be between %s and %s", g, minGrace, maxGrace)
