@@ -46,6 +46,7 @@ func SaveSettings(path string, s Settings) error {
 	if err := os.WriteFile(tmp, b, 0o600); err != nil {
 		return err
 	}
+	defer func() { _ = os.Remove(tmp) }()
 	return os.Rename(tmp, path)
 }
 
@@ -93,7 +94,7 @@ func (s Settings) Enabled(userHome, searchPath string) []string {
 
 // Build makes the enabled exporters for one run
 // names maps job ids to names for trace titles, entries let nodloop find the verdict a correction fixes
-func (s Settings) Build(ctx context.Context, entries []ledger.Entry, names map[string]string, version, userHome, searchPath string) ([]Exporter, error) {
+func (s Settings) Build(ctx context.Context, entries []ledger.Entry, names map[string]string, version, userHome, searchPath, cursorDir string) ([]Exporter, error) {
 	var out []Exporter
 	for _, name := range s.Enabled(userHome, searchPath) {
 		switch name {
@@ -106,7 +107,7 @@ func (s Settings) Build(ctx context.Context, entries []ledger.Entry, names map[s
 		case NameLangfuse:
 			out = append(out, NewLangfuseScore(*s.Langfuse))
 		case NameNodloop:
-			out = append(out, NewNodloop(FindNodloop(userHome, searchPath), entries))
+			out = append(out, NewNodloop(FindNodloop(userHome, searchPath), filepath.Join(cursorDir, "nodloop-bindings.json"), entries))
 		}
 	}
 	return out, nil

@@ -24,9 +24,9 @@ func fakeNodloop(t *testing.T, outcomeExit string) (bin, log string) {
 	script := `#!/bin/sh
 echo "$@" >> ` + log + `
 if [ "$1" = trace ]; then
-  printf 'r1\t2026-10-08T13:01:00Z\trun\t\t$0.0100\n'
-  printf 'r2\t2026-10-08T13:05:00Z\trun\t\t$0.0100\n'
-  printf 'x1\t2026-10-08T13:06:00Z\tcompaction\t\t$0.0000\n'
+  printf '%s' '[{"id":"r1","time":"2026-10-08T08:01:00Z","name":"run","session_id":"sess-1"},
+{"id":"r2","time":"2026-10-08T09:05:00Z","name":"run","session_id":"sess-1"},
+{"id":"x1","time":"2026-10-08T09:06:00Z","name":"compaction","session_id":"sess-1"}]'
 fi
 if [ "$1" = feedback ]; then exit ` + outcomeExit + `; fi
 `
@@ -40,37 +40,42 @@ func TestNodloop(t *testing.T) {
 		verdict(t, "v1", ledger.VerdictFail, "sess-1"),
 		verdict(t, "v2", ledger.VerdictMissed),
 		entry(t, "c1", ledger.KindCorrection, ledger.Correction{VerdictID: "v1", Verdict: ledger.VerdictPass, Reason: "renamed"}),
-		entry(t, "c2", ledger.KindCorrection, ledger.Correction{VerdictID: "v1", Verdict: ledger.VerdictMissed, Reason: "my own session"}),
-		entry(t, "c3", ledger.KindCorrection, ledger.Correction{VerdictID: "v2", Verdict: ledger.VerdictFail, Reason: "it ran"}),
+		entry(t, "c2", ledger.KindCorrection,
+			ledger.Correction{VerdictID: "v1", Verdict: ledger.VerdictMissed, Reason: "my own session"}),
+		entry(t, "c3", ledger.KindCorrection,
+			ledger.Correction{VerdictID: "v2", Verdict: ledger.VerdictFail, Reason: "it ran"}),
 	}
 	type want struct {
 		calls     []string
 		permanent bool
 		failed    bool
+		deferred  bool
 	}
 	tcs := []struct {
 		name string
 		exit string
 		want want
 	}{
-		{name: "outcomes on the newest run", exit: "0", want: want{calls: []string{
-			"trace list --session sess-1",
-			"feedback outcome --trace r2 --result refuted --reviewer rindcut --note rindcut price-watch@2026-10-08T09:00:00-04:00",
-			"trace list --session sess-1",
-			"feedback outcome --trace r2 --result confirmed --reviewer rindcut --note rindcut correction of price-watch@2026-10-08T09:00:00-04:00: renamed",
-			"trace list --session sess-1",
-			"feedback outcome --trace r2 --result inconclusive --reviewer rindcut --note rindcut correction of price-watch@2026-10-08T09:00:00-04:00: my own session",
+		{name: "outcomes stay on the bound run", exit: "0", want: want{calls: []string{
+			"trace list --session sess-1 --json",
+			"feedback outcome --trace r2 --result refuted --actor code --reviewer rindcut --note " +
+				"rindcut price-watch@2026-10-08T09:00:00Z",
+			"feedback outcome --trace r2 --result confirmed --actor code --reviewer rindcut --note " +
+				"rindcut correction of price-watch@2026-10-08T09:00:00Z: renamed",
+			"feedback outcome --trace r2 --result inconclusive --actor code --reviewer rindcut --note " +
+				"rindcut correction of price-watch@2026-10-08T09:00:00Z: my own session",
 		}}},
-		{name: "a refused outcome is permanent", exit: "3", want: want{calls: []string{
-			"trace list --session sess-1",
-			"feedback outcome --trace r2 --result refuted --reviewer rindcut --note rindcut price-watch@2026-10-08T09:00:00-04:00",
-		}, permanent: true, failed: true}},
+		{name: "an unacknowledged outcome stays pending", exit: "3", want: want{calls: []string{
+			"trace list --session sess-1 --json",
+			"feedback outcome --trace r2 --result refuted --actor code --reviewer rindcut --note " +
+				"rindcut price-watch@2026-10-08T09:00:00Z",
+		}, failed: true, deferred: true}},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			bin, log := fakeNodloop(t, tc.exit)
-			err := export.NewNodloop(bin, es).Export(context.Background(), es)
+			err := export.NewNodloop(bin, filepath.Join(t.TempDir(), "bindings.json"), es).Export(context.Background(), es)
 			calls, readErr := os.ReadFile(log)
 			require.NoError(t, readErr)
 			var permanent export.PermanentError
@@ -78,6 +83,7 @@ func TestNodloop(t *testing.T) {
 				calls:     strings.Split(strings.TrimSpace(string(calls)), "\n"),
 				permanent: errors.As(err, &permanent),
 				failed:    err != nil,
+				deferred:  errors.Is(err, export.ErrDeferred),
 			})
 		})
 	}
@@ -86,7 +92,7 @@ func TestNodloop(t *testing.T) {
 func TestNodloopMissingBinary(t *testing.T) {
 	t.Parallel()
 	es := []ledger.Entry{verdict(t, "v1", ledger.VerdictFail, "sess-1")}
-	n := export.NewNodloop(filepath.Join(t.TempDir(), "gone"), es)
+	n := export.NewNodloop(filepath.Join(t.TempDir(), "gone"), filepath.Join(t.TempDir(), "bindings.json"), es)
 	err := n.Export(context.Background(), es)
 	require.Error(t, err)
 	var permanent export.PermanentError
