@@ -56,6 +56,22 @@ func (j Job) Slots(from, to time.Time) ([]Slot, error) {
 	return out, nil
 }
 
+// Next is the first slot after t
+// A month ahead covers most schedules and a year the rest, so false means none fires within a year
+func (j Job) Next(t time.Time) (Slot, bool) {
+	from := t.Add(time.Nanosecond)
+	for _, to := range []time.Time{from.AddDate(0, 1, 1), from.AddDate(1, 0, 1)} {
+		slots, err := j.Slots(from, to)
+		if err != nil {
+			return Slot{}, false
+		}
+		if len(slots) > 0 {
+			return slots[0], true
+		}
+	}
+	return Slot{}, false
+}
+
 // wallTime is the instant a local clock shows h:m on day
 // False when the clock never shows it because DST skipped it
 func wallTime(day time.Time, h, m int, loc *time.Location) (time.Time, bool) {

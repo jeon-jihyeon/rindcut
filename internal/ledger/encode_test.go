@@ -188,3 +188,24 @@ func TestAppendBudgetErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestAppendKeepsOutputEnds(t *testing.T) {
+	t.Parallel()
+	l, _, _ := open(t)
+	stdout := "collected 3 items\n" + strings.Repeat("文", 40<<10) + "\nFAILED test_rows"
+	j := ledger.Judgment{JobID: "report", Verdict: ledger.VerdictFail,
+		Checks: []ledger.CheckRecord{{Kind: "command", Status: "fail", Message: "exited 1",
+			Observed: map[string]any{"stdout": stdout, "exit_code": 1}}}}
+	e, err := l.Append(context.Background(), ledger.KindVerdict, j)
+	require.NoError(t, err)
+	var got ledger.Judgment
+	require.NoError(t, e.Decode(&got))
+	text, ok := got.Checks[0].Observed["stdout"].(string)
+	require.True(t, ok)
+	assert.True(t, utf8.ValidString(text))
+	assert.True(t, strings.HasPrefix(text, "collected 3 items\n"))
+	assert.True(t, strings.HasSuffix(text, "\nFAILED test_rows"))
+	assert.Contains(t, text, "…")
+	assert.Less(t, len(text), len(stdout))
+	assert.True(t, got.Checks[0].Truncated)
+}

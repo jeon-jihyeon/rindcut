@@ -26,7 +26,9 @@ type Result struct {
 
 // Env is the slot a check judges and the places it resolves paths against
 type Env struct {
-	Slot   time.Time
+	Slot time.Time
+	// Next is the job's following slot, zero when it has none
+	Next   time.Time
 	JobID  string
 	Folder string
 	// UserHome expands a leading ~ in file paths

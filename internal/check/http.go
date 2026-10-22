@@ -14,7 +14,17 @@ const (
 	// A body larger than this is still checked up to here, enough for any page a job writes
 	maxBody      = 1 << 20
 	keptBodyText = 2 << 10
+	// Retry-After is a date or a number of seconds, so anything longer is cut
+	keptRetryAfter = 64
 )
+
+// Answers that say the host is busy or its upstream is down for now, not that the output is wrong
+var busyStatus = map[int]bool{
+	http.StatusTooManyRequests:    true,
+	http.StatusBadGateway:         true,
+	http.StatusServiceUnavailable: true,
+	http.StatusGatewayTimeout:     true,
+}
 
 func runHTTP(ctx context.Context, s Spec, env Env) Result {
 	target := env.expand(s.URL)
@@ -35,6 +45,9 @@ func runHTTP(ctx context.Context, s Spec, env Env) Result {
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
 	observed["elapsed_ms"] = time.Since(start).Milliseconds()
 	observed["status"] = resp.StatusCode
+	if after := resp.Header.Get("Retry-After"); after != "" {
+		observed["retry_after"], _ = head([]byte(after), keptRetryAfter)
+	}
 	limitReached := len(body) > maxBody
 	if limitReached {
 		body = body[:maxBody]
@@ -65,15 +78,22 @@ func runHTTP(ctx context.Context, s Spec, env Env) Result {
 		r.Status, r.Message = StatusError, fmt.Sprintf("reading %s broke off: %v", target, err)
 		return r
 	}
-	switch {
-	case resp.StatusCode != s.status():
-		r.Status, r.Message = StatusFail, fmt.Sprintf("%s answered %d, expected %d", target, resp.StatusCode, s.status())
-	case contains != "" && match < 0:
-		r.Status, r.Message = StatusFail, fmt.Sprintf("%s doesn't contain %q", target, contains)
-	default:
-		r.Status, r.Message = StatusPass, fmt.Sprintf("%s answered %d", target, resp.StatusCode)
-	}
+	r.Status, r.Message = s.answer(target, resp.StatusCode, contains, match >= 0)
 	return r
+}
+
+// answer judges a fully read response
+func (s Spec) answer(target string, code int, contains string, matched bool) (Status, string) {
+	switch {
+	case code != s.status() && busyStatus[code]:
+		return StatusError, fmt.Sprintf("%s answered %d, busy or down for now, expected %d", target, code, s.status())
+	case code != s.status():
+		return StatusFail, fmt.Sprintf("%s answered %d, expected %d", target, code, s.status())
+	case contains != "" && !matched:
+		return StatusFail, fmt.Sprintf("%s doesn't contain %q", target, contains)
+	default:
+		return StatusPass, fmt.Sprintf("%s answered %d", target, code)
+	}
 }
 
 // The first n bytes as text, cut back to a whole UTF-8 character

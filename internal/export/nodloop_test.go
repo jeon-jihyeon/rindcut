@@ -24,9 +24,9 @@ func fakeNodloop(t *testing.T, outcomeExit string) (bin, log string) {
 	script := `#!/bin/sh
 echo "$@" >> ` + log + `
 if [ "$1" = trace ]; then
-  printf 'r1\t2026-10-08T00:01:00Z\trun\t\t$0.0100\n'
-  printf 'r2\t2026-10-08T00:05:00Z\trun\t\t$0.0100\n'
-  printf 'x1\t2026-10-08T00:06:00Z\tcompaction\t\t$0.0000\n'
+  printf 'r1\t2026-10-08T13:01:00Z\trun\t\t$0.0100\n'
+  printf 'r2\t2026-10-08T13:05:00Z\trun\t\t$0.0100\n'
+  printf 'x1\t2026-10-08T13:06:00Z\tcompaction\t\t$0.0000\n'
 fi
 if [ "$1" = feedback ]; then exit ` + outcomeExit + `; fi
 `
@@ -40,6 +40,8 @@ func TestNodloop(t *testing.T) {
 		verdict(t, "v1", ledger.VerdictFail, "sess-1"),
 		verdict(t, "v2", ledger.VerdictMissed),
 		entry(t, "c1", ledger.KindCorrection, ledger.Correction{VerdictID: "v1", Verdict: ledger.VerdictPass, Reason: "renamed"}),
+		entry(t, "c2", ledger.KindCorrection, ledger.Correction{VerdictID: "v1", Verdict: ledger.VerdictMissed, Reason: "my own session"}),
+		entry(t, "c3", ledger.KindCorrection, ledger.Correction{VerdictID: "v2", Verdict: ledger.VerdictFail, Reason: "it ran"}),
 	}
 	type want struct {
 		calls     []string
@@ -53,13 +55,15 @@ func TestNodloop(t *testing.T) {
 	}{
 		{name: "outcomes on the newest run", exit: "0", want: want{calls: []string{
 			"trace list --session sess-1",
-			"feedback outcome --trace r2 --result refuted --reviewer rindcut --note rindcut price-watch@2026-10-08T09:00:00+09:00",
+			"feedback outcome --trace r2 --result refuted --reviewer rindcut --note rindcut price-watch@2026-10-08T09:00:00-04:00",
 			"trace list --session sess-1",
-			"feedback outcome --trace r2 --result confirmed --reviewer rindcut --note rindcut correction of price-watch@2026-10-08T09:00:00+09:00: renamed",
+			"feedback outcome --trace r2 --result confirmed --reviewer rindcut --note rindcut correction of price-watch@2026-10-08T09:00:00-04:00: renamed",
+			"trace list --session sess-1",
+			"feedback outcome --trace r2 --result inconclusive --reviewer rindcut --note rindcut correction of price-watch@2026-10-08T09:00:00-04:00: my own session",
 		}}},
 		{name: "a refused outcome is permanent", exit: "3", want: want{calls: []string{
 			"trace list --session sess-1",
-			"feedback outcome --trace r2 --result refuted --reviewer rindcut --note rindcut price-watch@2026-10-08T09:00:00+09:00",
+			"feedback outcome --trace r2 --result refuted --reviewer rindcut --note rindcut price-watch@2026-10-08T09:00:00-04:00",
 		}, permanent: true, failed: true}},
 	}
 	for _, tc := range tcs {

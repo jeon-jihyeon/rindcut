@@ -42,6 +42,8 @@ type Spec struct {
 	// command
 	Run     string   `json:"run,omitempty"`
 	Timeout Duration `json:"timeout,omitempty"`
+	// Scripts maps each script file the command runs to its sha256 when the job was saved
+	Scripts map[string]string `json:"scripts,omitempty"`
 }
 
 var placeholder = regexp.MustCompile(`\{\{\s*([^{}]*?)\s*\}\}`)
