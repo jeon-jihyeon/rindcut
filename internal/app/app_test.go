@@ -26,8 +26,6 @@ import (
 	"github.com/jeon-jihyeon/rindcut/internal/lock"
 )
 
-var edt = time.FixedZone("EDT", -4*3600)
-
 type world struct {
 	a      app.App
 	now    *time.Time
@@ -39,7 +37,7 @@ type world struct {
 
 func newWorld(t *testing.T) world {
 	t.Helper()
-	now := time.Date(2026, 10, 8, 9, 10, 0, 0, edt)
+	now := time.Date(2026, 10, 8, 9, 10, 0, 0, time.UTC)
 	refuse := false
 	w := world{now: &now, folder: t.TempDir(), warn: &bytes.Buffer{}, refuse: &refuse}
 	userHome := t.TempDir()
@@ -59,7 +57,7 @@ func newWorld(t *testing.T) world {
 
 func (w world) job() job.Job {
 	return job.Job{
-		Name: "가격 수집", Schedule: "0 9 * * *", Timezone: "America/New_York", Grace: check.Duration(30 * time.Minute),
+		Name: "가격 수집", Schedule: "0 9 * * *", Timezone: "UTC", Grace: check.Duration(30 * time.Minute),
 		Evidence: job.EvidenceSession, Folder: w.folder, Marker: "오늘 가격 수집해줘",
 		Checks: []check.Spec{{Kind: check.KindFile, Path: "out/{{date}}.csv"}},
 	}
@@ -161,7 +159,7 @@ func TestRemoveAndJobs(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, list, 1)
 	require.NotNil(t, list[0].NextSlot)
-	assert.Equal(t, "2026-10-09T09:00:00-04:00", list[0].NextSlot.Format(time.RFC3339))
+	assert.Equal(t, "2026-10-09T09:00:00Z", list[0].NextSlot.Format(time.RFC3339))
 
 	removed, err := w.a.Remove(ctx, saved.ID)
 	require.NoError(t, err)
@@ -198,10 +196,13 @@ func TestReport(t *testing.T) {
 		settings string
 		want     []string
 	}{
-		{name: "judged slot is not silent", at: time.Date(2026, 10, 9, 10, 0, 0, 0, edt), verdict: true, want: []string{}},
-		{name: "unjudged closed slot is silent", at: time.Date(2026, 10, 9, 10, 0, 0, 0, edt), want: []string{"job"}},
-		{name: "a slot within two ticks of closing isn't silent yet", at: time.Date(2026, 10, 9, 9, 35, 0, 0, edt), want: []string{}},
-		{name: "broken exporter settings still give a report", at: time.Date(2026, 10, 9, 10, 0, 0, 0, edt), verdict: true, settings: "{", want: []string{}},
+		{name: "judged slot is not silent", at: time.Date(2026, 10, 9, 10, 0, 0, 0, time.UTC), verdict: true,
+			want: []string{}},
+		{name: "unjudged closed slot is silent", at: time.Date(2026, 10, 9, 10, 0, 0, 0, time.UTC), want: []string{"job"}},
+		{name: "a slot within two ticks of closing isn't silent yet", at: time.Date(2026, 10, 9, 9, 35, 0, 0, time.UTC),
+			want: []string{}},
+		{name: "broken exporter settings still give a report", at: time.Date(2026, 10, 9, 10, 0, 0, 0, time.UTC),
+			verdict: true, settings: "{", want: []string{}},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -209,7 +210,7 @@ func TestReport(t *testing.T) {
 			w := newWorld(t)
 			saved := w.saved(t, w.job())
 			if tc.verdict {
-				w.verdict(t, saved.ID, time.Date(2026, 10, 9, 9, 0, 0, 0, edt), ledger.VerdictPass)
+				w.verdict(t, saved.ID, time.Date(2026, 10, 9, 9, 0, 0, 0, time.UTC), ledger.VerdictPass)
 			}
 			if tc.settings != "" {
 				require.NoError(t, os.WriteFile(w.a.Home.Path("exporters.json"), []byte(tc.settings), 0o600))
@@ -231,7 +232,7 @@ func TestVerdictsAndCorrect(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	ctx := context.Background()
-	day := func(d int) time.Time { return time.Date(2026, 10, d, 9, 0, 0, 0, edt) }
+	day := func(d int) time.Time { return time.Date(2026, 10, d, 9, 0, 0, 0, time.UTC) }
 	w.verdict(t, "a", day(5), ledger.VerdictPass)
 	wrong := w.verdict(t, "a", day(6), ledger.VerdictFail)
 	w.verdict(t, "b", day(7), ledger.VerdictMissed)
@@ -309,7 +310,8 @@ func TestSetExporter(t *testing.T) {
 
 func transcript(t *testing.T, path, cwd, prompt string) {
 	t.Helper()
-	line, err := json.Marshal(map[string]any{"type": "user", "sessionId": "s", "cwd": cwd, "timestamp": "2026-10-08T13:01:00Z",
+	line, err := json.Marshal(map[string]any{
+		"type": "user", "sessionId": "s", "cwd": cwd, "timestamp": "2026-10-08T09:01:00Z",
 		"message": map[string]any{"role": "user", "content": prompt}})
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, append(line, '\n'), 0o600))
@@ -379,7 +381,7 @@ func TestTickLockAndStatus(t *testing.T) {
 	unlock()
 
 	w.saved(t, w.job())
-	*w.now = time.Date(2026, 10, 9, 9, 31, 0, 0, edt)
+	*w.now = time.Date(2026, 10, 9, 9, 31, 0, 0, time.UTC)
 	r, err := w.a.Tick(ctx)
 	require.NoError(t, err)
 	assert.False(t, r.Busy)
@@ -401,7 +403,7 @@ func TestExportFromStart(t *testing.T) {
 	ctx := context.Background()
 	_, err := w.a.SetExporter(ctx, "otlp", json.RawMessage(`{"enabled":true,"endpoint":"`+srv.URL+`"}`))
 	require.NoError(t, err)
-	w.verdict(t, "a", time.Date(2026, 10, 8, 9, 0, 0, 0, edt), ledger.VerdictPass)
+	w.verdict(t, "a", time.Date(2026, 10, 8, 9, 0, 0, 0, time.UTC), ledger.VerdictPass)
 
 	tcs := []struct {
 		name      string
@@ -434,15 +436,16 @@ func TestLedgerDamageIsReported(t *testing.T) {
 
 func TestReportUnjudged(t *testing.T) {
 	t.Parallel()
-	day := func(d, h int) time.Time { return time.Date(2026, 10, d, h, 0, 0, 0, edt) }
+	day := func(d, h int) time.Time { return time.Date(2026, 10, d, h, 0, 0, 0, time.UTC) }
 	type args struct {
 		judged []int
 		at     time.Time
 		since  time.Duration
 	}
 	type want struct {
-		silent int
-		gaps   []app.Gap
+		silent  int
+		overdue []int
+		expired []int
 	}
 	tcs := []struct {
 		name string
@@ -450,11 +453,12 @@ func TestReportUnjudged(t *testing.T) {
 		want want
 	}{
 		{name: "every slot judged", args: args{judged: []int{9, 10}, at: day(10, 10), since: 48 * time.Hour},
-			want: want{gaps: []app.Gap{}}},
-		{name: "a later verdict doesn't hide an earlier gap", args: args{judged: []int{10}, at: day(10, 10), since: 48 * time.Hour},
-			want: want{silent: 1, gaps: []app.Gap{{Overdue: 1}}}},
+			want: want{overdue: []int{}, expired: []int{}}},
+		{name: "a later verdict doesn't hide an earlier gap",
+			args: args{judged: []int{10}, at: day(10, 10), since: 48 * time.Hour},
+			want: want{silent: 1, overdue: []int{1}, expired: []int{0}}},
 		{name: "slots past the lookback expired", args: args{at: day(17, 10), since: 240 * time.Hour},
-			want: want{silent: 1, gaps: []app.Gap{{Overdue: 7, Expired: 2}}}},
+			want: want{silent: 1, overdue: []int{7}, expired: []int{2}}},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -467,41 +471,48 @@ func TestReportUnjudged(t *testing.T) {
 			*w.now = tc.args.at
 			r, err := w.a.Report(context.Background(), tc.args.since)
 			require.NoError(t, err)
-			gaps := []app.Gap{}
+			overdue, expired := []int{}, []int{}
 			for _, id := range r.Silent {
-				gaps = append(gaps, r.Unjudged[id])
+				overdue = append(overdue, r.Unjudged[id].Overdue)
+				expired = append(expired, r.Unjudged[id].Expired)
 			}
-			assert.Equal(t, tc.want, want{silent: len(r.Silent), gaps: gaps})
+			assert.Equal(t, tc.want, want{silent: len(r.Silent), overdue: overdue, expired: expired})
 		})
 	}
 }
 
 func TestReportLateStart(t *testing.T) {
 	t.Parallel()
-	slot := time.Date(2026, 10, 9, 9, 0, 0, 0, edt)
+	slot := time.Date(2026, 10, 9, 9, 0, 0, 0, time.UTC)
 	id := job.Slug("가격 수집")
-	tcs := []struct {
-		name    string
+	type args struct {
 		jobID   string
 		verdict ledger.Verdict
 		start   time.Time
-		want    string
+	}
+	tcs := []struct {
+		name string
+		args args
+		want string
 	}{
-		{name: "missed slot that ran late", jobID: id, verdict: ledger.VerdictMissed, start: slot.Add(2 * time.Hour),
-			want: `{"session_id":"s1","started_at":"2026-10-09T11:00:00-04:00","grace":"30m0s"}`},
-		{name: "missed slot with no later session", jobID: id, verdict: ledger.VerdictMissed,
-			start: slot.AddDate(0, 0, 1).Add(time.Minute), want: "null"},
-		{name: "a fail isn't a late start", jobID: id, verdict: ledger.VerdictFail, start: slot.Add(2 * time.Hour), want: "null"},
-		{name: "a job the ledger doesn't know", jobID: "gone", verdict: ledger.VerdictMissed, start: slot.Add(2 * time.Hour), want: "null"},
+		{name: "missed slot that ran late",
+			args: args{jobID: id, verdict: ledger.VerdictMissed, start: slot.Add(2 * time.Hour)},
+			want: `{"session_id":"s1","started_at":"2026-10-09T11:00:00Z","grace":"30m0s"}`},
+		{name: "missed slot with no later session",
+			args: args{jobID: id, verdict: ledger.VerdictMissed, start: slot.AddDate(0, 0, 1).Add(time.Minute)}, want: "null"},
+		{name: "a fail isn't a late start",
+			args: args{jobID: id, verdict: ledger.VerdictFail, start: slot.Add(2 * time.Hour)}, want: "null"},
+		{name: "a job the ledger doesn't know",
+			args: args{jobID: "gone", verdict: ledger.VerdictMissed, start: slot.Add(2 * time.Hour)}, want: "null"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			w := newWorld(t)
 			w.saved(t, w.job())
-			w.verdict(t, tc.jobID, slot, tc.verdict)
+			w.verdict(t, tc.args.jobID, slot, tc.args.verdict)
 			_, err := w.a.Ledger().Append(context.Background(), ledger.KindSession, ledger.Session{
-				SessionID: "s1", Cwd: w.folder, StartedAt: tc.start, FirstPrompt: "오늘 가격 수집해줘"})
+				SessionID: "s1", Cwd: w.folder, StartedAt: tc.args.start, FirstPrompt: "오늘 가격 수집해줘"})
 			require.NoError(t, err)
 			*w.now = slot.AddDate(0, 0, 1).Add(time.Hour)
 			r, err := w.a.Report(context.Background(), 48*time.Hour)
@@ -516,30 +527,65 @@ func TestReportLateStart(t *testing.T) {
 
 func TestPreviewPinsAndWarns(t *testing.T) {
 	t.Parallel()
-	w := newWorld(t)
-	ctx := context.Background()
-	script := filepath.Join(w.folder, "check.sh")
-	require.NoError(t, os.WriteFile(script, []byte("test -s out/latest.csv\n"), 0o700))
-	no := false
-	j := w.job()
-	j.Checks = []check.Spec{
-		{Kind: check.KindFile, Path: "out/{{date}}.csv"},
-		{Kind: check.KindFile, Path: "out/latest.csv", Fresh: &no},
-		{Kind: check.KindCommand, Run: "./check.sh"},
+	tcs := []struct {
+		name   string
+		script string
+		want   int
+	}{
+		{name: "undated script", script: "test -s out/latest.csv\n", want: 2},
+		{name: "script using the slot date", script: "test -s \"out/$RINDCUT_DATE.csv\"\n", want: 1},
 	}
-	p, err := w.a.Preview(ctx, j)
-	require.NoError(t, err)
-	assert.Len(t, p.Warnings, 2)
-	assert.Contains(t, p.Warnings[0], "check 2, file")
-	assert.Contains(t, p.Job.Checks[2].Scripts, script)
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			w := newWorld(t)
+			script := filepath.Join(w.folder, "check.sh")
+			require.NoError(t, os.WriteFile(script, []byte(tc.script), 0o700))
+			no := false
+			j := w.job()
+			j.Checks = []check.Spec{
+				{Kind: check.KindFile, Path: "out/{{date}}.csv"},
+				{Kind: check.KindFile, Path: "out/latest.csv", Fresh: &no},
+				{Kind: check.KindCommand, Run: "./check.sh"},
+			}
+			p, err := w.a.Preview(context.Background(), j)
+			require.NoError(t, err)
+			assert.Len(t, p.Warnings, tc.want)
+			require.NotEmpty(t, p.Warnings)
+			assert.Contains(t, p.Warnings[0], "check 2, file")
+			assert.Contains(t, p.Job.Checks[2].Scripts, script)
+		})
+	}
+}
 
-	require.NoError(t, os.WriteFile(script, []byte("test -s \"out/$RINDCUT_DATE.csv\"\n"), 0o700))
-	_, err = w.a.Save(ctx, j)
-	assert.ErrorIs(t, err, app.ErrNoPreview, "a script edited after the preview needs a new one")
-	p, err = w.a.Preview(ctx, j)
-	require.NoError(t, err)
-	assert.Len(t, p.Warnings, 1)
-	s, err := w.a.Save(ctx, j)
-	require.NoError(t, err)
-	assert.Equal(t, p.Job.Checks[2].Scripts, s.Job.Checks[2].Scripts)
+func TestSaveRequiresCurrentScriptPreview(t *testing.T) {
+	t.Parallel()
+	tcs := []struct {
+		name    string
+		preview bool
+		want    error
+	}{
+		{name: "edited script needs a preview", want: app.ErrNoPreview},
+		{name: "edited script previewed again", preview: true},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			w := newWorld(t)
+			ctx := context.Background()
+			script := filepath.Join(w.folder, "check.sh")
+			require.NoError(t, os.WriteFile(script, []byte("exit 0\n"), 0o700))
+			j := w.job()
+			j.Checks = []check.Spec{{Kind: check.KindCommand, Run: "sh check.sh"}}
+			_, err := w.a.Preview(ctx, j)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(script, []byte("exit 1\n"), 0o700))
+			if tc.preview {
+				_, err = w.a.Preview(ctx, j)
+				require.NoError(t, err)
+			}
+			_, err = w.a.Save(ctx, j)
+			assert.ErrorIs(t, err, tc.want)
+		})
+	}
 }

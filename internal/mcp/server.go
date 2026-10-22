@@ -38,7 +38,7 @@ type JobInput struct {
 	ID       string       `json:"id,omitempty" jsonschema:"existing job id to change it, empty to make a new id from the name"`
 	Name     string       `json:"name" jsonschema:"what the owner calls the job, any language"`
 	Schedule string       `json:"schedule" jsonschema:"5-field cron: minute hour day-of-month month day-of-week, like 0 9 * * mon-fri"`
-	Timezone string       `json:"timezone" jsonschema:"IANA zone like America/New_York"`
+	Timezone string       `json:"timezone" jsonschema:"IANA zone like UTC"`
 	Grace    string       `json:"grace" jsonschema:"how long the run may take after its scheduled time, Go duration from 1m to 24h, like 30m"`
 	Evidence string       `json:"evidence" jsonschema:"session when the job runs as a local Claude session (Desktop scheduled task, cron claude -p, /loop), none for cloud Cowork or Routines"`
 	Folder   string       `json:"folder,omitempty" jsonschema:"session jobs: absolute working folder of the scheduled session"`
@@ -108,6 +108,10 @@ type ExporterInput struct {
 
 type Empty struct{}
 
+type listResult[T any] struct {
+	Items []T `json:"items"`
+}
+
 func since(text string, fallback time.Duration) (time.Duration, error) {
 	if text == "" {
 		return fallback, nil
@@ -138,20 +142,24 @@ func New(a app.App) *sdk.Server {
 			return a.Save(ctx, j)
 		})
 	add(srv, "job_list", "List jobs with their last verdict and next run."+dataNote,
-		func(ctx context.Context, in ListInput) ([]app.JobView, error) { return a.Jobs(ctx, in.All) })
+		func(ctx context.Context, in ListInput) (listResult[app.JobView], error) {
+			items, err := a.Jobs(ctx, in.All)
+			return listResult[app.JobView]{Items: append([]app.JobView{}, items...)}, err
+		})
 	add(srv, "job_remove", "Stop checking a job. Its history stays.",
 		func(ctx context.Context, in RemoveInput) (job.Job, error) { return a.Remove(ctx, in.ID) })
 	add(srv, "verdicts", "List verdicts newest first with every check's evidence, the matched Claude sessions and any correction. Use it to explain why a run failed."+dataNote,
-		func(ctx context.Context, in VerdictsInput) ([]app.VerdictView, error) {
+		func(ctx context.Context, in VerdictsInput) (listResult[app.VerdictView], error) {
 			back, err := since(in.Since, 7*24*time.Hour)
 			if err != nil {
-				return nil, err
+				return listResult[app.VerdictView]{}, err
 			}
 			limit := in.Limit
 			if limit == 0 {
 				limit = 20
 			}
-			return a.Verdicts(ctx, app.VerdictFilter{JobID: in.JobID, Since: a.Now().Add(-back), Verdict: ledger.Verdict(in.Verdict), Limit: limit})
+			items, err := a.Verdicts(ctx, app.VerdictFilter{JobID: in.JobID, Since: a.Now().Add(-back), Verdict: ledger.Verdict(in.Verdict), Limit: limit})
+			return listResult[app.VerdictView]{Items: append([]app.VerdictView{}, items...)}, err
 		})
 	add(srv, "correct", "Override a wrong verdict with the owner's reason. The original verdict stays in the ledger.",
 		func(ctx context.Context, in CorrectInput) (ledger.Entry, error) {
@@ -186,7 +194,7 @@ func New(a app.App) *sdk.Server {
 func add[In, Out any](srv *sdk.Server, name, description string, h func(context.Context, In) (Out, error)) {
 	schema, err := jsonschema.For[Out](&jsonschema.ForOptions{TypeSchemas: map[reflect.Type]*jsonschema.Schema{
 		reflect.TypeFor[check.Duration]():  {Type: "string"},
-		reflect.TypeFor[json.RawMessage](): {},
+		reflect.TypeFor[json.RawMessage](): {Type: "object"},
 	}})
 	if err != nil {
 		panic(fmt.Sprintf("tool %s output schema: %v", name, err))

@@ -14,7 +14,7 @@ import (
 
 func valid() job.Job {
 	return job.Job{
-		ID: "price-watch", Name: "가격 수집", Schedule: "0 9 * * *", Timezone: "America/New_York",
+		ID: "price-watch", Name: "가격 수집", Schedule: "0 9 * * *", Timezone: "UTC",
 		Grace: check.Duration(30 * time.Minute), Evidence: job.EvidenceSession,
 		Folder: "/home/ann/price", Marker: "오늘 가격 수집해줘",
 		Checks:   []check.Spec{{Kind: check.KindFile, Path: "out/{{date}}.csv"}},
@@ -193,12 +193,12 @@ func TestSlotsDST(t *testing.T) {
 func TestSlotWindowAndKey(t *testing.T) {
 	t.Parallel()
 	j := valid()
-	from := time.Date(2026, 10, 8, 0, 0, 0, 0, zone(t, "America/New_York"))
+	from := time.Date(2026, 10, 8, 0, 0, 0, 0, time.UTC)
 	slots, err := j.Slots(from, from.AddDate(0, 0, 1))
 	require.NoError(t, err)
 	require.Len(t, slots, 1)
 	assert.Equal(t, 30*time.Minute, slots[0].End.Sub(slots[0].At))
-	assert.Equal(t, "price-watch@2026-10-08T09:00:00-04:00", slots[0].Key())
+	assert.Equal(t, "price-watch@2026-10-08T09:00:00Z", slots[0].Key())
 }
 
 func TestRevisions(t *testing.T) {
@@ -241,26 +241,51 @@ func TestRevisions(t *testing.T) {
 func TestNext(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC) // a Thursday
+	type args struct {
+		schedule string
+		timezone string
+	}
 	type want struct {
 		at string
 		ok bool
 	}
 	tcs := []struct {
-		name, schedule string
-		want           want
+		name string
+		args args
+		want want
 	}{
-		{name: "daily", schedule: "0 9 * * *", want: want{at: "2026-10-02T09:00:00Z", ok: true}},
-		{name: "weekly", schedule: "0 9 * * thu", want: want{at: "2026-10-08T09:00:00Z", ok: true}},
-		{name: "yearly", schedule: "0 9 1 9 *", want: want{at: "2027-09-01T09:00:00Z", ok: true}},
-		{name: "never fires", schedule: "0 9 31 2 *", want: want{at: "0001-01-01T00:00:00Z"}},
+		{name: "daily", args: args{schedule: "0 9 * * *", timezone: "UTC"},
+			want: want{at: "2026-10-02T09:00:00Z", ok: true}},
+		{name: "weekly", args: args{schedule: "0 9 * * thu", timezone: "UTC"},
+			want: want{at: "2026-10-08T09:00:00Z", ok: true}},
+		{name: "yearly", args: args{schedule: "0 9 1 9 *", timezone: "UTC"},
+			want: want{at: "2027-09-01T09:00:00Z", ok: true}},
+		{name: "every minute", args: args{schedule: "* * * * *", timezone: "UTC"},
+			want: want{at: "2026-10-01T09:01:00Z", ok: true}},
+		{name: "never fires", args: args{schedule: "0 9 31 2 *", timezone: "UTC"},
+			want: want{at: "0001-01-01T00:00:00Z"}},
+		{name: "invalid schedule", args: args{schedule: "bad", timezone: "UTC"},
+			want: want{at: "0001-01-01T00:00:00Z"}},
+		{name: "invalid timezone", args: args{schedule: "0 9 * * *", timezone: "invalid"},
+			want: want{at: "0001-01-01T00:00:00Z"}},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			j := valid()
-			j.Timezone, j.Schedule = "UTC", tc.schedule
+			j.Timezone, j.Schedule = tc.args.timezone, tc.args.schedule
 			s, ok := j.Next(at)
 			assert.Equal(t, tc.want, want{at: s.At.Format(time.RFC3339), ok: ok})
 		})
+	}
+}
+
+func BenchmarkNextEveryMinute(b *testing.B) {
+	j := valid()
+	j.Timezone, j.Schedule = "UTC", "* * * * *"
+	at := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
+	b.ReportAllocs()
+	for b.Loop() {
+		j.Next(at)
 	}
 }

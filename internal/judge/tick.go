@@ -115,7 +115,7 @@ func (j Judge) run(ctx context.Context, r job.Job, s job.Slot) []check.Result {
 	return out
 }
 
-// Pin pins the job's command checks to their script files, resolved the way the tick runs them
+// Pin hashes the scripts of every command check in the job folder, so a later edit to a script makes the check an error until the owner previews and saves again
 func (j Judge) Pin(r job.Job) job.Job {
 	env := j.env(r)
 	checks := make([]check.Spec, len(r.Checks))
@@ -167,7 +167,7 @@ func (st state) due(now time.Time) []job.Slot {
 	return out
 }
 
-// Scheduled lists the slots in [from, to) of every job, oldest first
+// Scheduled lists the slots of every revision between from and to
 // Each revision covers only the time it was in force, so a schedule change never invents old slots
 func Scheduled(revs []job.Job, from, to time.Time) []job.Slot {
 	byID := map[string][]job.Job{}

@@ -25,7 +25,7 @@ Ask one thing at a time and skip what the owner already told you.
    - Each line in `warnings` is a check that gives the same answer every run, so a pass doesn't prove that run worked. Offer a `{{date}}` path, a file that must be fresh, or a script that reads `RINDCUT_DATE`. The owner may keep it as it is.
 7. Only after the owner agrees, call `job_save` with `confirmed: true` and the same fields. The first save also schedules the checker every 5 minutes; tell them it's running.
 
-To change a job, preview it with its `id` and the new fields, show what changed, then save. After the owner edits a check script, preview and save the job again: rindcut pins each script, and a changed one makes its check inconclusive. To stop one, use `job_remove`.
+To change a job, preview it with its `id` and the new fields, show what changed, then save. After the owner edits a check script, preview and save the job again: rindcut pins recognized literal script paths, and a changed one makes its check inconclusive. Dynamic paths and scripts called inside another script aren't pinned. To stop one, use `job_remove`.
 
 ## Explain results
 

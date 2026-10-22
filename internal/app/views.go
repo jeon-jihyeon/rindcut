@@ -20,31 +20,34 @@ import (
 // A day where everything passed still has one, because a summary that stops arriving is the alarm
 type Report struct {
 	ledger.Report
-	// Problems is the ledger's list with the late start of each missed slot
+	// Problems replaces the ledger's list so a missed slot can carry the session that started late
 	Problems []Problem         `json:"problems"`
 	Names    map[string]string `json:"names"`
-	// Unjudged counts per job the slots in the period whose window closed two ticks ago with no verdict
+	// Unjudged counts, per job id, closed slots in the period still without a verdict two ticks later
 	Unjudged map[string]Gap `json:"unjudged"`
-	// Silent lists the jobs with an unjudged slot, a sign the tick stopped
+	// Silent lists the job ids in Unjudged, a sign the tick stopped
 	Silent []string     `json:"silent"`
 	Lag    []export.Lag `json:"lag"`
 }
 
+// Problem is a ledger problem plus, for a missed session job, the late session that may explain it
 type Problem struct {
 	ledger.Problem
 	LateStart *LateStart `json:"late_start,omitempty"`
 }
 
-// LateStart is a session of the job that started after a missed slot's window and before the next slot
+// LateStart is a session that ran after the slot's window closed and before the next slot
+// It is shown next to the missed verdict and never changes it
 type LateStart struct {
 	SessionID string         `json:"session_id"`
 	StartedAt time.Time      `json:"started_at"`
 	Grace     check.Duration `json:"grace"`
 }
 
+// Gap counts the closed slots of one job that never got a verdict
 type Gap struct {
-	Overdue int `json:"overdue"` // the tick still owes a verdict
-	Expired int `json:"expired"` // older than the lookback, never judged
+	Overdue int `json:"overdue"` // still eligible for judgment
+	Expired int `json:"expired"` // beyond the lookback and never judged
 }
 
 // Report reads the ledger and cursors only, so a broken exporter setting never stops the summary
@@ -71,8 +74,8 @@ func (a App) Report(ctx context.Context, since time.Duration) (Report, error) {
 	return r, nil
 }
 
-// unjudged counts the slots in [from, now) that closed two ticks ago and have no verdict anywhere in the ledger
-// A slot gets its verdict at the first tick after its window, so a slot two ticks past that is owed
+// unjudged counts each closed slot in the period that has no verdict
+// A slot gets its verdict at the first tick after its window, so only a slot two ticks past that counts
 func unjudged(entries []ledger.Entry, revs []job.Job, from, now time.Time) map[string]Gap {
 	judged := map[string]bool{}
 	for _, e := range entries {
@@ -98,7 +101,6 @@ func unjudged(entries []ledger.Entry, revs []job.Job, from, now time.Time) map[s
 	return out
 }
 
-// lateStarts adds to each missed problem the session that ran it late, if one did
 func lateStarts(problems []ledger.Problem, revs []job.Job, sessions []ledger.Session) []Problem {
 	out := make([]Problem, len(problems))
 	for i, p := range problems {
@@ -115,7 +117,7 @@ func lateStarts(problems []ledger.Problem, revs []job.Job, sessions []ledger.Ses
 	return out
 }
 
-// Only a session that started after a slot in the period can be its late start
+// sessionsSince lists sessions that started in the report period, the only ones a late start may cite
 func sessionsSince(entries []ledger.Entry, from time.Time) []ledger.Session {
 	var out []ledger.Session
 	for _, e := range entries {

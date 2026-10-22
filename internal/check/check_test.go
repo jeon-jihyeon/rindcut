@@ -19,7 +19,7 @@ import (
 	"github.com/jeon-jihyeon/rindcut/internal/check"
 )
 
-var slot = time.Date(2026, 10, 8, 9, 0, 0, 0, time.FixedZone("EDT", -4*3600))
+var slot = time.Date(2026, 10, 8, 9, 0, 0, 0, time.UTC)
 
 func envIn(dir string) check.Env {
 	return check.Env{Slot: slot, JobID: "price-watch", Folder: dir, UserHome: dir, Dir: dir}
@@ -214,7 +214,7 @@ func TestFileNextSlot(t *testing.T) {
 	}
 	type want struct {
 		status check.Status
-		next   any
+		next   string
 	}
 	tcs := []struct {
 		name string
@@ -222,11 +222,11 @@ func TestFileNextSlot(t *testing.T) {
 		want want
 	}{
 		{name: "changed inside the slot", args: args{path: "in-window.md", next: next},
-			want: want{status: check.StatusPass, next: "2026-10-09T13:00:00Z"}},
+			want: want{status: check.StatusPass, next: "2026-10-09T09:00:00Z"}},
 		{name: "changed at the next slot", args: args{path: "at-next.md", next: next},
-			want: want{status: check.StatusError, next: "2026-10-09T13:00:00Z"}},
+			want: want{status: check.StatusError, next: "2026-10-09T09:00:00Z"}},
 		{name: "changed after the next slot", args: args{path: "after-next.md", next: next},
-			want: want{status: check.StatusError, next: "2026-10-09T13:00:00Z"}},
+			want: want{status: check.StatusError, next: "2026-10-09T09:00:00Z"}},
 		{name: "no next slot", args: args{path: "after-next.md"}, want: want{status: check.StatusPass}},
 		{name: "not fresh", args: args{path: "after-next.md", fresh: &no, next: next}, want: want{status: check.StatusPass}},
 	}
@@ -236,7 +236,8 @@ func TestFileNextSlot(t *testing.T) {
 			env := envIn(dir)
 			env.Next = tc.args.next
 			r := check.Run(context.Background(), check.Spec{Kind: check.KindFile, Path: tc.args.path, Fresh: tc.args.fresh}, env)
-			assert.Equal(t, tc.want, want{status: r.Status, next: r.Observed["next_slot"]}, r.Message)
+			next, _ := r.Observed["next_slot"].(string)
+			assert.Equal(t, tc.want, want{status: r.Status, next: next}, r.Message)
 		})
 	}
 }
@@ -260,29 +261,83 @@ func TestHTTPBusy(t *testing.T) {
 	}
 	type want struct {
 		status check.Status
-		after  any
+		after  string
+		cut    bool
 	}
 	tcs := []struct {
 		name string
 		args args
 		want want
 	}{
-		{name: "429 with Retry-After", args: args{path: "/429?after=120"}, want: want{status: check.StatusError, after: "120"}},
+		{name: "429 with Retry-After", args: args{path: "/429?after=120"},
+			want: want{status: check.StatusError, after: "120"}},
 		{name: "502", args: args{path: "/502"}, want: want{status: check.StatusError}},
 		{name: "503 with a date", args: args{path: "/503?after=Wed,%2021%20Oct%202026%2007:28:00%20GMT"},
 			want: want{status: check.StatusError, after: "Wed, 21 Oct 2026 07:28:00 GMT"}},
 		{name: "504", args: args{path: "/504"}, want: want{status: check.StatusError}},
 		{name: "long Retry-After is cut", args: args{path: "/503?after=" + strings.Repeat("9", 100)},
-			want: want{status: check.StatusError, after: strings.Repeat("9", 64)}},
+			want: want{status: check.StatusError, after: strings.Repeat("9", 64), cut: true}},
 		{name: "500 is a fail", args: args{path: "/500"}, want: want{status: check.StatusFail}},
 		{name: "expected 503", args: args{path: "/503", status: 503}, want: want{status: check.StatusPass}},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			r := check.Run(context.Background(), check.Spec{Kind: check.KindHTTP, URL: srv.URL + tc.args.path, Status: tc.args.status},
+			r := check.Run(context.Background(),
+				check.Spec{Kind: check.KindHTTP, URL: srv.URL + tc.args.path, Status: tc.args.status},
 				envIn(t.TempDir()))
-			assert.Equal(t, tc.want, want{status: r.Status, after: r.Observed["retry_after"]}, r.Message)
+			after, _ := r.Observed["retry_after"].(string)
+			assert.Equal(t, tc.want, want{status: r.Status, after: after, cut: r.Truncated}, r.Message)
+		})
+	}
+}
+
+func TestHTTPUnreadable(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Length", "100")
+		_, _ = w.Write([]byte("short"))
+	}))
+	t.Cleanup(srv.Close)
+	tcs := []struct {
+		name string
+		url  string
+		want string
+	}{
+		{name: "malformed request", url: "http://[invalid", want: "bad url"},
+		{name: "body cut off in transit", url: srv.URL, want: "broke off"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			r := check.Run(context.Background(), check.Spec{Kind: check.KindHTTP, URL: tc.url}, envIn(t.TempDir()))
+			assert.Equal(t, check.StatusError, r.Status)
+			assert.Contains(t, r.Message, tc.want)
+		})
+	}
+}
+
+func TestCommandFolder(t *testing.T) {
+	t.Parallel()
+	tcs := []struct {
+		name   string
+		folder bool
+	}{
+		{name: "job folder", folder: true},
+		{name: "home fallback"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			write(t, filepath.Join(dir, "rows.txt"), "row", slot)
+			env := check.Env{Dir: dir, UserHome: dir, Slot: slot}
+			if tc.folder {
+				env.Folder = dir
+			}
+			r := check.Run(context.Background(), check.Spec{Kind: check.KindCommand, Run: "cat rows.txt"}, env)
+			assert.Equal(t, check.StatusPass, r.Status, r.Message)
+			assert.Equal(t, "row", r.Observed["stdout"])
 		})
 	}
 }
@@ -302,8 +357,10 @@ func TestCommandOutputEnds(t *testing.T) {
 		{name: "short output stays whole", run: "printf 'ok'", want: want{stdout: []string{"ok"}, bytes: 2}},
 		{name: "exactly head and tail stays whole", run: "head -c 4096 /dev/zero | tr '\\0' x",
 			want: want{stdout: []string{strings.Repeat("x", 4096)}, bytes: 4096}},
-		{name: "the reason printed last survives", run: "printf 'collected 3 items\\n'; yes . | head -c 10000; printf 'FAILED test_rows'; exit 1",
-			want: want{stdout: []string{"collected 3 items", "\n… 5938 bytes cut …\n", "FAILED test_rows"}, bytes: 10034, cut: true}},
+		{name: "the reason printed last survives", run: "printf 'collected 3 items\\n'; " +
+			"yes . | head -c 10000; printf 'FAILED test_rows'; exit 1",
+			want: want{stdout: []string{"collected 3 items", "\n… 5938 bytes cut …\n", "FAILED test_rows"},
+				bytes: 10034, cut: true}},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

@@ -14,11 +14,11 @@ const (
 	// A body larger than this is still checked up to here, enough for any page a job writes
 	maxBody      = 1 << 20
 	keptBodyText = 2 << 10
-	// Retry-After is a date or a number of seconds, so anything longer is cut
+	// A `Retry-After` value is a date or seconds, so anything longer is cut
 	keptRetryAfter = 64
 )
 
-// Answers that say the host is busy or its upstream is down for now, not that the output is wrong
+// Statuses that say the server is busy or down for now, so the check couldn't look and an unexpected one is an error, not a fail
 var busyStatus = map[int]bool{
 	http.StatusTooManyRequests:    true,
 	http.StatusBadGateway:         true,
@@ -46,7 +46,7 @@ func runHTTP(ctx context.Context, s Spec, env Env) Result {
 	observed["elapsed_ms"] = time.Since(start).Milliseconds()
 	observed["status"] = resp.StatusCode
 	if after := resp.Header.Get("Retry-After"); after != "" {
-		observed["retry_after"], _ = head([]byte(after), keptRetryAfter)
+		observed["retry_after"], r.Truncated = head([]byte(after), keptRetryAfter)
 	}
 	limitReached := len(body) > maxBody
 	if limitReached {
@@ -73,7 +73,7 @@ func runHTTP(ctx context.Context, s Spec, env Env) Result {
 	text, cut := head(body[offset:], keptBodyText)
 	observed["body"] = text
 	observed["body_offset"] = offset
-	r.Truncated = cut || offset > 0 || limitReached
+	r.Truncated = r.Truncated || cut || offset > 0 || limitReached
 	if err != nil {
 		r.Status, r.Message = StatusError, fmt.Sprintf("reading %s broke off: %v", target, err)
 		return r
@@ -82,7 +82,6 @@ func runHTTP(ctx context.Context, s Spec, env Env) Result {
 	return r
 }
 
-// answer judges a fully read response
 func (s Spec) answer(target string, code int, contains string, matched bool) (Status, string) {
 	switch {
 	case code != s.status() && busyStatus[code]:
