@@ -12,6 +12,7 @@ import (
 // The SessionEnd hook input, only the fields a session record needs
 type hookInput struct {
 	SessionID      string `json:"session_id"`
+	RunID          string `json:"run_id"`
 	TranscriptPath string `json:"transcript_path"`
 	Cwd            string `json:"cwd"`
 	Reason         string `json:"reason"`
@@ -33,6 +34,7 @@ func runHook(args []string, e env) error {
 	}
 	_, err = a.RecordSession(context.Background(), ledger.Session{
 		SessionID: in.SessionID, TranscriptPath: in.TranscriptPath, Cwd: in.Cwd, EndReason: in.Reason,
+		RunID: in.RunID,
 	})
 	return err
 }

@@ -166,6 +166,45 @@ func TestHookNeverFails(t *testing.T) {
 	}
 }
 
+func TestHookRunID(t *testing.T) {
+	t.Parallel()
+	tcs := []struct {
+		name string
+		run  string
+	}{
+		{name: "ordinary hook leaves reference empty"},
+		{name: "producer supplies exact run", run: "run-one"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			h, folder := newHome(t), t.TempDir()
+			seed(t, h, folder)
+			transcript := filepath.Join(t.TempDir(), "session.jsonl")
+			first := `{"type":"user","sessionId":"session-one","timestamp":"2026-10-08T09:01:00Z",` +
+				`"message":{"role":"user","content":"오늘 가격 수집해줘"}}` + "\n"
+			require.NoError(t, os.WriteFile(transcript, []byte(first), 0o600))
+			input, err := json.Marshal(map[string]string{
+				"session_id": "session-one", "run_id": tc.run, "transcript_path": transcript, "cwd": folder,
+			})
+			require.NoError(t, err)
+			hook := cli(t, h, string(input), "hook", "session-end")
+			require.Equal(t, 0, hook.code)
+			require.Empty(t, hook.stderr)
+			tick := cli(t, h, "", "tick")
+			require.Equal(t, 0, tick.code, tick.stderr)
+			out := cli(t, h, "", "ledger", "--kind", "verdict")
+			require.Equal(t, 0, out.code, out.stderr)
+			var e ledger.Entry
+			require.NoError(t, json.Unmarshal([]byte(out.stdout), &e))
+			var j ledger.Judgment
+			require.NoError(t, e.Decode(&j))
+			assert.Equal(t, tc.run, j.RunID)
+			assert.Equal(t, []string{"session-one"}, j.Sessions)
+		})
+	}
+}
+
 func TestTickReportExport(t *testing.T) {
 	t.Parallel()
 	h := newHome(t)

@@ -39,6 +39,28 @@ func TestSettingsFile(t *testing.T) {
 	assert.Equal(t, export.Settings{}, empty)
 }
 
+func TestSaveSettingsFailure(t *testing.T) {
+	t.Parallel()
+	tcs := []struct{ name string }{{name: "parent"}, {name: "temporary file"}, {name: "rename"}}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			path := filepath.Join(dir, "settings.json")
+			switch tc.name {
+			case "parent":
+				path = filepath.Join(dir, "file", "settings.json")
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "file"), nil, 0o600))
+			case "temporary file":
+				require.NoError(t, os.Mkdir(path+".tmp", 0o700))
+			case "rename":
+				require.NoError(t, os.Mkdir(path, 0o700))
+			}
+			assert.Error(t, export.SaveSettings(path, export.Settings{Nodloop: &export.NodloopSettings{Enabled: true}}))
+		})
+	}
+}
+
 func TestReplace(t *testing.T) {
 	t.Parallel()
 	tcs := []struct {

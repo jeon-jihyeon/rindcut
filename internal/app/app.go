@@ -301,7 +301,7 @@ func (a App) export(ctx context.Context, name string) ([]export.Lag, error) {
 	if err != nil {
 		return nil, err
 	}
-	all, err := s.Build(ctx, entries, Names(entries), a.Version, a.UserHome, a.SearchPath)
+	all, err := s.Build(ctx, entries, Names(entries), a.Version, a.UserHome, a.SearchPath, a.cursorDir())
 	if err != nil {
 		return nil, err
 	}

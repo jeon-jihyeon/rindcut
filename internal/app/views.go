@@ -215,7 +215,7 @@ func (a App) SetExporter(ctx context.Context, name string, raw json.RawMessage) 
 		return ExporterResult{}, err
 	}
 	out := ExporterResult{Settings: s.Masked(), Test: "off"}
-	built, err := s.Build(ctx, nil, nil, a.Version, a.UserHome, a.SearchPath)
+	built, err := s.Build(ctx, nil, nil, a.Version, a.UserHome, a.SearchPath, a.cursorDir())
 	if err != nil {
 		out.Test = err.Error()
 		return out, nil

@@ -67,7 +67,11 @@ func (j Judge) Tick(ctx context.Context) (TickResult, error) {
 			out.Backfilled, backfilled = n, true
 			matched = st.matching(r, s)
 		}
-		e, err := j.Ledger.Append(ctx, ledger.KindVerdict, judgment(r, s, j.run(ctx, r, s), matched, TriggerTick))
+		p := judgment(r, s, j.run(ctx, r, s), matched, TriggerTick)
+		if len(matched) > 0 {
+			p.RunID = st.sessions[matched[len(matched)-1]].RunID
+		}
+		e, err := j.Ledger.Append(ctx, ledger.KindVerdict, p)
 		if err != nil {
 			return out, err
 		}
@@ -91,6 +95,9 @@ func (j Judge) Probe(ctx context.Context, r job.Job, at time.Time, fingerprint s
 		return ledger.Entry{}, err
 	}
 	p := judgment(r, s, j.run(ctx, r, s), st.matching(r, s), TriggerCheck)
+	if len(p.Sessions) > 0 {
+		p.RunID = st.sessions[p.Sessions[len(p.Sessions)-1]].RunID
+	}
 	p.Fingerprint = fingerprint
 	return j.Ledger.Append(ctx, ledger.KindProbe, p)
 }
@@ -196,10 +203,25 @@ func laterOf(a, b time.Time) time.Time {
 }
 
 // remember keeps one record per session
-// A complete record replaces an incomplete one, otherwise the first record stays
+// A complete record replaces an incomplete one and keeps the run id the incomplete one carried
+// Otherwise the first record stays, and when it has no run id it takes one from a later record with the same folder, start and first prompt
 func (st state) remember(s ledger.Session) {
-	if old, seen := st.sessions[s.SessionID]; !seen || (!old.Complete() && s.Complete()) {
+	old, seen := st.sessions[s.SessionID]
+	if !seen {
 		st.sessions[s.SessionID] = s
+		return
+	}
+	if !old.Complete() && s.Complete() {
+		if old.RunID != "" {
+			s.RunID = old.RunID
+		}
+		st.sessions[s.SessionID] = s
+		return
+	}
+	if old.RunID == "" && s.RunID != "" && old.Cwd == s.Cwd &&
+		old.StartedAt.Equal(s.StartedAt) && old.FirstPrompt == s.FirstPrompt {
+		old.RunID = s.RunID
+		st.sessions[s.SessionID] = old
 	}
 }
 

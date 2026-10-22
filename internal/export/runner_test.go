@@ -17,7 +17,7 @@ import (
 	"github.com/jeon-jihyeon/rindcut/internal/ledger"
 )
 
-var t0 = time.Date(2026, 10, 8, 13, 40, 0, 0, time.UTC)
+var t0 = time.Date(2026, 10, 8, 9, 40, 0, 0, time.UTC)
 
 func entry(t *testing.T, id string, kind ledger.Kind, data any) ledger.Entry {
 	t.Helper()
@@ -29,7 +29,7 @@ func entry(t *testing.T, id string, kind ledger.Kind, data any) ledger.Entry {
 func verdict(t *testing.T, id string, v ledger.Verdict, sessions ...string) ledger.Entry {
 	t.Helper()
 	return entry(t, id, ledger.KindVerdict, ledger.Judgment{
-		JobID: "price-watch", JobRevision: 2, SlotKey: "price-watch@2026-10-08T09:00:00-04:00",
+		JobID: "price-watch", JobRevision: 2, SlotKey: "price-watch@2026-10-08T09:00:00Z",
 		Slot: t0.Add(-40 * time.Minute), WindowEnd: t0.Add(-10 * time.Minute), Verdict: v, Sessions: sessions, Trigger: "tick",
 		Checks: []ledger.CheckRecord{{Kind: "file", Status: string(v), Message: "no file", Observed: map[string]any{"exists": false, "path": "/x"}}},
 	})
@@ -100,6 +100,20 @@ func TestRunnerFailures(t *testing.T) {
 				return nil
 			},
 			want: want{sent: []string{"v000", "v002"}, lag: export.Lag{Exporter: "x", Dropped: 1, LastDropped: "v001: 400 bad trace"}},
+		},
+		{
+			name: "temporary failure while isolating a refused batch",
+			fail: func(ids []string) error {
+				if len(ids) > 1 {
+					return refused
+				}
+				if ids[0] == "v001" {
+					return transient
+				}
+				return nil
+			},
+			want: want{sent: []string{"v000"}, lag: export.Lag{Exporter: "x", Pending: 2,
+				LastError: "backend down", FailedAt: &t0}},
 		},
 	}
 	for _, tc := range tcs {

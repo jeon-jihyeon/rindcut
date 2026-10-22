@@ -22,7 +22,9 @@ func (v Verdict) Valid() bool {
 
 // Session is a local Claude session as the plugin hook or the transcript backfill saw it
 type Session struct {
-	SessionID      string    `json:"session_id"`
+	SessionID string `json:"session_id"`
+	// RunID is the nodloop run the SessionEnd input named, empty when it named none
+	RunID          string    `json:"run_id,omitempty"`
 	Cwd            string    `json:"cwd"`
 	StartedAt      time.Time `json:"started_at"`
 	EndedAt        time.Time `json:"ended_at"`
@@ -66,8 +68,10 @@ type Judgment struct {
 	Verdict     Verdict       `json:"verdict"`
 	Checks      []CheckRecord `json:"checks"`
 	Sessions    []string      `json:"sessions,omitempty"`
-	Trigger     string        `json:"trigger"`
-	Note        string        `json:"note,omitempty"`
+	// RunID is the run id of the last matched session, which the nodloop exporter prefers over a match by time
+	RunID   string `json:"run_id,omitempty"`
+	Trigger string `json:"trigger"`
+	Note    string `json:"note,omitempty"`
 	// Fingerprint names the job definition a probe checked, so a save can prove the owner saw it
 	Fingerprint string `json:"fingerprint,omitempty"`
 }
