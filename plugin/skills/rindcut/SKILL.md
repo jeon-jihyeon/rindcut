@@ -22,6 +22,7 @@ Ask one thing at a time and skip what the owner already told you.
 4. For a session job, ask the owner to paste the scheduled prompt and use its first line as `marker`, and the folder the task runs in as `folder`. This is how rindcut tells the scheduled run apart from a session they open by hand.
 5. Pick `grace`: how long a run normally takes, plus a margin. 30m is a fine default.
 6. Call `job_preview`. Explain the probe: what each check saw and what rindcut would conclude right now. If a check can never pass, like a wrong path, fix it with the owner and preview again.
+   - Each line in `warnings` is a check that gives the same answer every run, so a pass doesn't prove that run worked. Offer a `{{date}}` path, a file that must be fresh, or a script that reads `RINDCUT_DATE`. The owner may keep it as it is.
 7. Only after the owner agrees, call `job_save` with `confirmed: true` and the same fields. The first save also schedules the checker every 5 minutes; tell them it's running.
 
 To change a job, preview it with its `id` and the new fields, show what changed, then save. After the owner edits a check script, preview and save the job again: rindcut pins each script, and a changed one makes its check inconclusive. To stop one, use `job_remove`.
@@ -29,7 +30,7 @@ To change a job, preview it with its `id` and the new fields, show what changed,
 ## Explain results
 
 - "Did it work?", "why did it fail?": call `verdicts` for that job. Explain the failing check from its evidence: the path it looked at, whether it existed, the size, the status code, the command's exit code and output.
-- `missed` means the job expects a local session and none matched in its window, so it likely never ran.
+- `missed` means the job expects a local session and none matched in its window, so it likely never ran. A missed problem in `report` with `late_start` did run, late: say so instead of saying it never ran. When it started far past the grace, the computer may have been asleep or the app closed. If the output is there, offer `correct` only if the owner wants it.
 - `inconclusive` means a check couldn't look, like no network, a busy site answering 503 or 429, a script that exited 75, a script changed since the job was saved, or an undated file rewritten after a later run's time, so nothing is known.
 - A verdict with the note that no session matched but all checks passed: the work exists, but the marker or folder may be off. Offer to fix the job.
 - If the owner says a verdict is wrong, call `correct` with their reason and their name in `by`. The original stays on record.
@@ -38,7 +39,7 @@ To change a job, preview it with its `id` and the new fields, show what changed,
 
 `report` returns counts, problems with reasons, silent jobs and export lag. rindcut doesn't send messages. If the owner wants it every morning, help them set up their own scheduled task that calls `report` and posts it through their messenger connection. A summary that stops arriving is itself the warning, so it should go out on good days too.
 
-- `silent` jobs had a closed slot and no verdict: the checker may have stopped. Call `status` and check `last_tick`.
+- `silent` jobs had a closed slot and no verdict: the checker may have stopped. `unjudged` says how many are still owed and how many are older than 7 days and will never be judged. Call `status` and check `last_tick`.
 - Export lag with an error means verdicts aren't reaching their tracing tool. Say which one and the error.
 
 ## Connect a tracing tool

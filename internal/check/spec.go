@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -51,6 +52,12 @@ var placeholder = regexp.MustCompile(`\{\{\s*([^{}]*?)\s*\}\}`)
 // Template variables a check field may use
 var variables = map[string]bool{"date": true, "yesterday": true, "slot": true, "job": true}
 
+// Template variables and environment names whose value changes with the slot
+var (
+	slotVariable = regexp.MustCompile(`\{\{\s*(date|yesterday|slot)\s*\}\}`)
+	slotEnv      = regexp.MustCompile(`RINDCUT_(SLOT|DATE)`)
+)
+
 func (s Spec) Validate() error {
 	if err := s.validateKind(); err != nil {
 		return err
@@ -93,6 +100,29 @@ func (s Spec) validateKind() error {
 		return fmt.Errorf("unknown check kind %q, use file, http or command", s.Kind)
 	}
 	return nil
+}
+
+// SlotFree is true when the check would give the same answer for every slot, so its pass proves nothing about one run
+// A pinned script that can't be read counts as tied to the slot, so a read failure never raises a false warning
+func (s Spec) SlotFree() bool {
+	switch s.Kind {
+	case KindFile:
+		return !s.fresh() && !slotVariable.MatchString(s.Path)
+	case KindHTTP:
+		return !slotVariable.MatchString(s.URL) && !slotVariable.MatchString(s.Contains)
+	case KindCommand:
+		if slotVariable.MatchString(s.Run) || slotEnv.MatchString(s.Run) {
+			return false
+		}
+		for path := range s.Scripts {
+			text, err := os.ReadFile(path)
+			if err != nil || slotEnv.Match(text) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 func (s Spec) fresh() bool { return s.Fresh == nil || *s.Fresh }

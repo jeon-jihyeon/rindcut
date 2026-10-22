@@ -432,24 +432,114 @@ func TestLedgerDamageIsReported(t *testing.T) {
 	assert.True(t, strings.Contains(w.warn.String(), "skipped ledger line 1"))
 }
 
-func TestPreviewPins(t *testing.T) {
+func TestReportUnjudged(t *testing.T) {
+	t.Parallel()
+	day := func(d, h int) time.Time { return time.Date(2026, 10, d, h, 0, 0, 0, edt) }
+	type args struct {
+		judged []int
+		at     time.Time
+		since  time.Duration
+	}
+	type want struct {
+		silent int
+		gaps   []app.Gap
+	}
+	tcs := []struct {
+		name string
+		args args
+		want want
+	}{
+		{name: "every slot judged", args: args{judged: []int{9, 10}, at: day(10, 10), since: 48 * time.Hour},
+			want: want{gaps: []app.Gap{}}},
+		{name: "a later verdict doesn't hide an earlier gap", args: args{judged: []int{10}, at: day(10, 10), since: 48 * time.Hour},
+			want: want{silent: 1, gaps: []app.Gap{{Overdue: 1}}}},
+		{name: "slots past the lookback expired", args: args{at: day(17, 10), since: 240 * time.Hour},
+			want: want{silent: 1, gaps: []app.Gap{{Overdue: 7, Expired: 2}}}},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			w := newWorld(t)
+			saved := w.saved(t, w.job())
+			for _, d := range tc.args.judged {
+				w.verdict(t, saved.ID, day(d, 9), ledger.VerdictPass)
+			}
+			*w.now = tc.args.at
+			r, err := w.a.Report(context.Background(), tc.args.since)
+			require.NoError(t, err)
+			gaps := []app.Gap{}
+			for _, id := range r.Silent {
+				gaps = append(gaps, r.Unjudged[id])
+			}
+			assert.Equal(t, tc.want, want{silent: len(r.Silent), gaps: gaps})
+		})
+	}
+}
+
+func TestReportLateStart(t *testing.T) {
+	t.Parallel()
+	slot := time.Date(2026, 10, 9, 9, 0, 0, 0, edt)
+	id := job.Slug("가격 수집")
+	tcs := []struct {
+		name    string
+		jobID   string
+		verdict ledger.Verdict
+		start   time.Time
+		want    string
+	}{
+		{name: "missed slot that ran late", jobID: id, verdict: ledger.VerdictMissed, start: slot.Add(2 * time.Hour),
+			want: `{"session_id":"s1","started_at":"2026-10-09T11:00:00-04:00","grace":"30m0s"}`},
+		{name: "missed slot with no later session", jobID: id, verdict: ledger.VerdictMissed,
+			start: slot.AddDate(0, 0, 1).Add(time.Minute), want: "null"},
+		{name: "a fail isn't a late start", jobID: id, verdict: ledger.VerdictFail, start: slot.Add(2 * time.Hour), want: "null"},
+		{name: "a job the ledger doesn't know", jobID: "gone", verdict: ledger.VerdictMissed, start: slot.Add(2 * time.Hour), want: "null"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			w := newWorld(t)
+			w.saved(t, w.job())
+			w.verdict(t, tc.jobID, slot, tc.verdict)
+			_, err := w.a.Ledger().Append(context.Background(), ledger.KindSession, ledger.Session{
+				SessionID: "s1", Cwd: w.folder, StartedAt: tc.start, FirstPrompt: "오늘 가격 수집해줘"})
+			require.NoError(t, err)
+			*w.now = slot.AddDate(0, 0, 1).Add(time.Hour)
+			r, err := w.a.Report(context.Background(), 48*time.Hour)
+			require.NoError(t, err)
+			require.Len(t, r.Problems, 1)
+			late, err := json.Marshal(r.Problems[0].LateStart)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, string(late))
+		})
+	}
+}
+
+func TestPreviewPinsAndWarns(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	ctx := context.Background()
 	script := filepath.Join(w.folder, "check.sh")
 	require.NoError(t, os.WriteFile(script, []byte("test -s out/latest.csv\n"), 0o700))
+	no := false
 	j := w.job()
-	j.Checks = []check.Spec{{Kind: check.KindFile, Path: "out/{{date}}.csv"}, {Kind: check.KindCommand, Run: "./check.sh"}}
+	j.Checks = []check.Spec{
+		{Kind: check.KindFile, Path: "out/{{date}}.csv"},
+		{Kind: check.KindFile, Path: "out/latest.csv", Fresh: &no},
+		{Kind: check.KindCommand, Run: "./check.sh"},
+	}
 	p, err := w.a.Preview(ctx, j)
 	require.NoError(t, err)
-	assert.Contains(t, p.Job.Checks[1].Scripts, script)
+	assert.Len(t, p.Warnings, 2)
+	assert.Contains(t, p.Warnings[0], "check 2, file")
+	assert.Contains(t, p.Job.Checks[2].Scripts, script)
 
 	require.NoError(t, os.WriteFile(script, []byte("test -s \"out/$RINDCUT_DATE.csv\"\n"), 0o700))
 	_, err = w.a.Save(ctx, j)
 	assert.ErrorIs(t, err, app.ErrNoPreview, "a script edited after the preview needs a new one")
 	p, err = w.a.Preview(ctx, j)
 	require.NoError(t, err)
+	assert.Len(t, p.Warnings, 1)
 	s, err := w.a.Save(ctx, j)
 	require.NoError(t, err)
-	assert.Equal(t, p.Job.Checks[1].Scripts, s.Job.Checks[1].Scripts)
+	assert.Equal(t, p.Job.Checks[2].Scripts, s.Job.Checks[2].Scripts)
 }

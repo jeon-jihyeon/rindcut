@@ -14,7 +14,7 @@ import (
 )
 
 // Slots older than this get no verdict, so a laptop off for weeks doesn't wake to a flood
-const lookback = 7 * 24 * time.Hour
+const Lookback = 7 * 24 * time.Hour
 
 const (
 	TriggerTick  = "tick"
@@ -150,10 +150,21 @@ func (j Judge) load(ctx context.Context) (state, error) {
 }
 
 // due lists every closed, unjudged slot in the lookback, oldest first
-// Each revision covers only the time it was in force, so a schedule change never invents old slots
 func (st state) due(now time.Time) []job.Slot {
+	var out []job.Slot
+	for _, s := range Scheduled(st.revs, now.Add(-Lookback), now) {
+		if !s.End.After(now) && !st.judged[s.Key()] {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// Scheduled lists the slots in [from, to) of every job, oldest first
+// Each revision covers only the time it was in force, so a schedule change never invents old slots
+func Scheduled(revs []job.Job, from, to time.Time) []job.Slot {
 	byID := map[string][]job.Job{}
-	for _, r := range st.revs {
+	for _, r := range revs {
 		byID[r.ID] = append(byID[r.ID], r)
 	}
 	var out []job.Slot
@@ -163,26 +174,25 @@ func (st state) due(now time.Time) []job.Slot {
 			if r.Removed {
 				continue
 			}
-			from, to := r.Since, now
-			if i+1 < len(revs) {
-				to = revs[i+1].Since
+			start, end := laterOf(from, r.Since), to
+			if i+1 < len(revs) && revs[i+1].Since.Before(end) {
+				end = revs[i+1].Since
 			}
-			if earliest := now.Add(-lookback); from.Before(earliest) {
-				from = earliest
-			}
-			slots, err := r.Slots(from, to)
-			if err != nil {
-				continue
-			}
-			for _, s := range slots {
-				if !s.End.After(now) && !st.judged[s.Key()] {
-					out = append(out, s)
-				}
+			slots, err := r.Slots(start, end)
+			if err == nil {
+				out = append(out, slots...)
 			}
 		}
 	}
 	sort.Slice(out, func(a, b int) bool { return out[a].At.Before(out[b].At) })
 	return out
+}
+
+func laterOf(a, b time.Time) time.Time {
+	if b.After(a) {
+		return b
+	}
+	return a
 }
 
 // remember keeps one record per session

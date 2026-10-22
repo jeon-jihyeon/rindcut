@@ -186,10 +186,16 @@ func report(c call) error {
 	t.Rows = append(t.Rows, []string{"totals", fmt.Sprintf("pass %d, fail %d, missed %d, inconclusive %d",
 		r.Totals.Pass, r.Totals.Fail, r.Totals.Missed, r.Totals.Inconclusive), ""})
 	for _, p := range r.Problems {
-		t.Rows = append(t.Rows, []string{p.SlotKey, string(p.Verdict), p.Reason})
+		reason := p.Reason
+		if p.LateStart != nil {
+			reason += ", a session started late at " + p.LateStart.StartedAt.Format(time.RFC3339)
+		}
+		t.Rows = append(t.Rows, []string{p.SlotKey, string(p.Verdict), reason})
 	}
 	for _, id := range r.Silent {
-		t.Rows = append(t.Rows, []string{id, "silent", "a slot closed with no verdict, is the tick running?"})
+		g := r.Unjudged[id]
+		t.Rows = append(t.Rows, []string{id, "silent", fmt.Sprintf("%d closed slots with no verdict, %d past the lookback, is the tick running?",
+			g.Overdue, g.Expired)})
 	}
 	for _, l := range r.Lag {
 		if l.Pending > 0 || l.Dropped > 0 || l.LastError != "" {

@@ -118,7 +118,7 @@ func since(text string, fallback time.Duration) (time.Duration, error) {
 // New builds the server with every tool bound to a
 func New(a app.App) *sdk.Server {
 	srv := sdk.NewServer(&sdk.Implementation{Name: "rindcut", Version: a.Version}, nil)
-	add(srv, "job_preview", "Validate a scheduled job, list its next 3 runs and check its latest past run right now without counting it. This runs the job's checks on this machine now: command checks execute as shell commands in the job folder, http checks make requests. Show the owner the probe in plain words before saving."+dataNote,
+	add(srv, "job_preview", "Validate a scheduled job, list its next 3 runs and check its latest past run right now without counting it. This runs the job's checks on this machine now: command checks execute as shell commands in the job folder, http checks make requests. Show the owner the probe and each warning in plain words before saving."+dataNote,
 		func(ctx context.Context, in JobInput) (app.Preview, error) {
 			j, err := in.job()
 			if err != nil {

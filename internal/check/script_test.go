@@ -90,3 +90,39 @@ func TestPinnedScriptChange(t *testing.T) {
 		})
 	}
 }
+
+func TestSlotFree(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	dated := filepath.Join(dir, "dated.sh")
+	plain := filepath.Join(dir, "plain.sh")
+	require.NoError(t, os.WriteFile(dated, []byte("test -s \"out/$RINDCUT_DATE.csv\"\n"), 0o700))
+	require.NoError(t, os.WriteFile(plain, []byte("test -s out/latest.csv\n"), 0o700))
+	no := false
+	pin := func(s check.Spec) check.Spec { return s.Pinned(envIn(dir)) }
+	tcs := []struct {
+		name string
+		spec check.Spec
+		want bool
+	}{
+		{name: "fresh file", spec: check.Spec{Kind: check.KindFile, Path: "out/latest.csv"}},
+		{name: "dated file", spec: check.Spec{Kind: check.KindFile, Path: "out/{{ date }}.csv", Fresh: &no}},
+		{name: "stale file allowed", spec: check.Spec{Kind: check.KindFile, Path: "out/latest.csv", Fresh: &no}, want: true},
+		{name: "job id alone", spec: check.Spec{Kind: check.KindFile, Path: "out/{{job}}.csv", Fresh: &no}, want: true},
+		{name: "page with a date", spec: check.Spec{Kind: check.KindHTTP, URL: "https://example.com/r", Contains: "{{yesterday}}"}},
+		{name: "page without one", spec: check.Spec{Kind: check.KindHTTP, URL: "https://example.com/r", Contains: "ok"}, want: true},
+		{name: "command with a slot variable", spec: check.Spec{Kind: check.KindCommand, Run: "grep -q {{slot}} log"}},
+		{name: "command reading the date", spec: check.Spec{Kind: check.KindCommand, Run: `test -s "out/$RINDCUT_DATE.csv"`}},
+		{name: "script reading the date", spec: pin(check.Spec{Kind: check.KindCommand, Run: "./dated.sh"})},
+		{name: "script without it", spec: pin(check.Spec{Kind: check.KindCommand, Run: "./plain.sh"}), want: true},
+		{name: "unreadable script", spec: check.Spec{Kind: check.KindCommand, Run: "./plain.sh",
+			Scripts: map[string]string{filepath.Join(dir, "gone.sh"): "x"}}},
+		{name: "unknown kind", spec: check.Spec{Kind: "sheet"}},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, tc.spec.SlotFree())
+		})
+	}
+}
