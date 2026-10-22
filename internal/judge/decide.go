@@ -48,6 +48,28 @@ func Matches(j job.Job, s job.Slot, sess ledger.Session) bool {
 	if sess.StartedAt.Before(s.At) || sess.StartedAt.After(s.End) {
 		return false
 	}
+	return sameJob(j, sess)
+}
+
+// Late is the earliest session of the job that started after the slot's window and before the next slot
+// A scheduler that wakes from sleep runs a missed time once, so a missed slot may have run hours late
+func Late(j job.Job, s job.Slot, sessions []ledger.Session) (ledger.Session, bool) {
+	next, bounded := j.Next(s.At)
+	var found ledger.Session
+	ok := false
+	for _, sess := range sessions {
+		started := sess.StartedAt
+		late := started.After(s.End) && (!bounded || started.Before(next.At))
+		earliest := !ok || started.Before(found.StartedAt)
+		if late && earliest && sess.Complete() && sameJob(j, sess) {
+			found, ok = sess, true
+		}
+	}
+	return found, ok
+}
+
+// sameJob says whether a session ran in the job's folder from the job's prompt
+func sameJob(j job.Job, sess ledger.Session) bool {
 	if strings.TrimSpace(firstLine(sess.FirstPrompt)) != strings.TrimSpace(j.Marker) {
 		return false
 	}

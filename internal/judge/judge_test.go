@@ -370,6 +370,76 @@ func TestScheduleFiles(t *testing.T) {
 	assert.False(t, in.Installed())
 }
 
+func TestScheduled(t *testing.T) {
+	t.Parallel()
+	r1 := baseJob("/work/a")
+	r1.Since = time.Date(2026, 10, 1, 12, 0, 0, 0, edt)
+	r2 := r1
+	r2.Revision, r2.Schedule, r2.Since = 2, "0 10 * * *", time.Date(2026, 10, 3, 9, 30, 0, 0, edt)
+	r3 := r2
+	r3.Revision, r3.Removed, r3.Since = 3, true, time.Date(2026, 10, 5, 12, 0, 0, 0, edt)
+	other := baseJob("/work/b")
+	other.ID, other.Schedule, other.Since = "other", "30 9 * * *", r1.Since
+	got := []string{}
+	for _, s := range judge.Scheduled([]job.Job{r3, other, r1, r2}, time.Date(2026, 10, 2, 0, 0, 0, 0, edt),
+		time.Date(2026, 10, 6, 0, 0, 0, 0, edt)) {
+		got = append(got, s.JobID+" "+s.At.In(edt).Format("01-02T15:04"))
+	}
+	assert.Equal(t, []string{
+		"price-watch 10-02T09:00", "other 10-02T09:30", "price-watch 10-03T09:00", "other 10-03T09:30", "price-watch 10-03T10:00",
+		"other 10-04T09:30", "price-watch 10-04T10:00", "other 10-05T09:30", "price-watch 10-05T10:00",
+	}, got)
+}
+
+func TestLate(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	daily := baseJob(dir)
+	hourly := baseJob(dir)
+	hourly.Schedule = "0 * * * *"
+	never := baseJob(dir)
+	never.Schedule = "0 9 31 2 *"
+	at := time.Date(2026, 10, 8, 9, 0, 0, 0, edt)
+	s := job.Slot{JobID: "price-watch", At: at, End: at.Add(30 * time.Minute)}
+	sess := func(id string, start time.Time, prompt string) ledger.Session {
+		return ledger.Session{SessionID: id, Cwd: dir, StartedAt: start, FirstPrompt: prompt}
+	}
+	marker := "오늘 가격 수집해줘"
+	type args struct {
+		j        job.Job
+		sessions []ledger.Session
+	}
+	type want struct {
+		id string
+		ok bool
+	}
+	tcs := []struct {
+		name string
+		args args
+		want want
+	}{
+		{name: "right after the window", args: args{j: daily, sessions: []ledger.Session{sess("a", s.End.Add(time.Second), marker)}},
+			want: want{id: "a", ok: true}},
+		{name: "earliest of two", args: args{j: daily, sessions: []ledger.Session{
+			sess("b", at.Add(5*time.Hour), marker), sess("a", at.Add(2*time.Hour), marker)}}, want: want{id: "a", ok: true}},
+		{name: "inside the window is a match, not late", args: args{j: daily, sessions: []ledger.Session{sess("a", s.End, marker)}}},
+		{name: "at the next slot", args: args{j: daily, sessions: []ledger.Session{sess("a", at.AddDate(0, 0, 1), marker)}}},
+		{name: "hourly catch-up in the next slot's window", args: args{j: hourly,
+			sessions: []ledger.Session{sess("a", at.Add(70*time.Minute), marker)}}},
+		{name: "another prompt", args: args{j: daily, sessions: []ledger.Session{sess("a", at.Add(time.Hour), "가격 파일 열어줘")}}},
+		{name: "incomplete record", args: args{j: daily, sessions: []ledger.Session{{SessionID: "a", Cwd: dir, FirstPrompt: marker}}}},
+		{name: "no next slot", args: args{j: never, sessions: []ledger.Session{sess("a", at.AddDate(0, 3, 0), marker)}},
+			want: want{id: "a", ok: true}},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, ok := judge.Late(tc.args.j, s, tc.args.sessions)
+			assert.Equal(t, tc.want, want{id: got.SessionID, ok: ok})
+		})
+	}
+}
+
 func TestPin(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)

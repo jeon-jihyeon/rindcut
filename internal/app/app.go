@@ -94,6 +94,8 @@ type Preview struct {
 	NextSlots []time.Time     `json:"next_slots"`
 	Probe     ledger.Judgment `json:"probe"`
 	ProbeID   string          `json:"probe_id"`
+	// Warnings name the checks that give the same answer every slot, so their pass proves nothing about one run
+	Warnings []string `json:"warnings"`
 }
 
 // Preview validates a job, lists its next slots and judges its latest slot without counting it
@@ -111,9 +113,14 @@ func (a App) Preview(ctx context.Context, j job.Job) (Preview, error) {
 	if err != nil {
 		return Preview{}, err
 	}
-	p := Preview{Job: j, NextSlots: []time.Time{}}
+	p := Preview{Job: j, NextSlots: []time.Time{}, Warnings: []string{}}
 	for _, s := range slots[:min(3, len(slots))] {
 		p.NextSlots = append(p.NextSlots, s.At)
+	}
+	for i, c := range j.Checks {
+		if c.SlotFree() {
+			p.Warnings = append(p.Warnings, fmt.Sprintf("check %d, %s, looks at nothing tied to the slot, so it gives the same answer every run", i+1, c.Kind))
+		}
 	}
 	e, err := a.Judge().Probe(ctx, j, now, Fingerprint(j))
 	if err != nil {
