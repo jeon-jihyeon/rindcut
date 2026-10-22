@@ -145,13 +145,16 @@ func (f *fixture) tick(at time.Time) judge.TickResult {
 }
 
 func (f *fixture) output(day string) {
-	dir := filepath.Join(f.folder, "out")
-	require.NoError(f.t, os.MkdirAll(dir, 0o700))
-	path := filepath.Join(dir, day+".csv")
-	require.NoError(f.t, os.WriteFile(path, []byte("row"), 0o600))
 	at, err := time.Parse(time.RFC3339, day+"T09:05:00-04:00")
 	require.NoError(f.t, err)
-	require.NoError(f.t, os.Chtimes(path, at, at))
+	f.file("out/"+day+".csv", at)
+}
+
+func (f *fixture) file(name string, mtime time.Time) {
+	path := filepath.Join(f.folder, name)
+	require.NoError(f.t, os.MkdirAll(filepath.Dir(path), 0o700))
+	require.NoError(f.t, os.WriteFile(path, []byte("row"), 0o600))
+	require.NoError(f.t, os.Chtimes(path, mtime, mtime))
 }
 
 func (f *fixture) session(s ledger.Session) {
@@ -257,6 +260,17 @@ func TestTick(t *testing.T) {
 			want: []string{"10-08T09 r1 fail [abc]"},
 		},
 		{
+			name: "an undated fresh file written after a gap passes only its latest slot",
+			setup: func(f *fixture) {
+				r := baseJob(f.folder)
+				r.Checks = []check.Spec{{Kind: check.KindFile, Path: "out/report.md"}}
+				f.save(r, time.Date(2026, 10, 5, 12, 0, 0, 0, edt))
+				f.file("out/report.md", time.Date(2026, 10, 8, 9, 5, 0, 0, edt))
+			},
+			at:   time.Date(2026, 10, 8, 9, 31, 0, 0, edt),
+			want: []string{"10-06T09 r1 inconclusive []", "10-07T09 r1 inconclusive []", "10-08T09 r1 pass []"},
+		},
+		{
 			name: "a complete backfill replaces an incomplete hook record",
 			setup: func(f *fixture) {
 				f.save(baseJob(f.folder), time.Date(2026, 10, 7, 12, 0, 0, 0, edt))
@@ -354,4 +368,17 @@ func TestScheduleFiles(t *testing.T) {
 	require.NoError(t, in.Install())
 	require.NoError(t, in.Uninstall())
 	assert.False(t, in.Installed())
+}
+
+func TestPin(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.file("check.sh", time.Date(2026, 10, 8, 9, 0, 0, 0, edt))
+	r := baseJob(f.folder)
+	r.Checks = []check.Spec{{Kind: check.KindFile, Path: "out/{{date}}.csv"}, {Kind: check.KindCommand, Run: "sh check.sh"}}
+	pinned := f.j.Pin(r)
+	assert.Nil(t, pinned.Checks[0].Scripts)
+	assert.Len(t, pinned.Checks[1].Scripts, 1)
+	assert.Nil(t, r.Checks[1].Scripts, "the caller's job stays as it was")
+	assert.Contains(t, pinned.Checks[1].Scripts, filepath.Join(f.folder, "check.sh"))
 }

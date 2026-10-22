@@ -96,12 +96,31 @@ func (j Judge) Probe(ctx context.Context, r job.Job, at time.Time, fingerprint s
 }
 
 func (j Judge) run(ctx context.Context, r job.Job, s job.Slot) []check.Result {
-	env := check.Env{Slot: s.At, JobID: r.ID, Folder: r.Folder, UserHome: j.UserHome, Dir: j.Dir}
+	env := j.env(r)
+	env.Slot = s.At
+	if next, ok := r.Next(s.At); ok {
+		env.Next = next.At
+	}
 	out := make([]check.Result, len(r.Checks))
 	for i, c := range r.Checks {
 		out[i] = check.Run(ctx, c, env)
 	}
 	return out
+}
+
+// Pin pins the job's command checks to their script files, resolved the way the tick runs them
+func (j Judge) Pin(r job.Job) job.Job {
+	env := j.env(r)
+	checks := make([]check.Spec, len(r.Checks))
+	for i, c := range r.Checks {
+		checks[i] = c.Pinned(env)
+	}
+	r.Checks = checks
+	return r
+}
+
+func (j Judge) env(r job.Job) check.Env {
+	return check.Env{JobID: r.ID, Folder: r.Folder, UserHome: j.UserHome, Dir: j.Dir}
 }
 
 func (j Judge) load(ctx context.Context) (state, error) {

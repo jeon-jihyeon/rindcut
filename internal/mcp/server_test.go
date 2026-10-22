@@ -142,7 +142,9 @@ func TestPreviewProbe(t *testing.T) {
 	h := start(t)
 	out := filepath.Join(h.folder, "out")
 	require.NoError(t, os.MkdirAll(out, 0o700))
+	written := time.Date(2026, 10, 8, 9, 5, 0, 0, time.FixedZone("EDT", -4*3600))
 	require.NoError(t, os.WriteFile(filepath.Join(out, "2026-10-08.csv"), []byte("row"), 0o600))
+	require.NoError(t, os.Chtimes(filepath.Join(out, "2026-10-08.csv"), written, written))
 	tcs := []struct {
 		name string
 		args map[string]any

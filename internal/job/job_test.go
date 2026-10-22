@@ -237,3 +237,30 @@ func TestRevisions(t *testing.T) {
 		})
 	}
 }
+
+func TestNext(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC) // a Thursday
+	type want struct {
+		at string
+		ok bool
+	}
+	tcs := []struct {
+		name, schedule string
+		want           want
+	}{
+		{name: "daily", schedule: "0 9 * * *", want: want{at: "2026-10-02T09:00:00Z", ok: true}},
+		{name: "weekly", schedule: "0 9 * * thu", want: want{at: "2026-10-08T09:00:00Z", ok: true}},
+		{name: "yearly", schedule: "0 9 1 9 *", want: want{at: "2027-09-01T09:00:00Z", ok: true}},
+		{name: "never fires", schedule: "0 9 31 2 *", want: want{at: "0001-01-01T00:00:00Z"}},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			j := valid()
+			j.Timezone, j.Schedule = "UTC", tc.schedule
+			s, ok := j.Next(at)
+			assert.Equal(t, tc.want, want{at: s.At.Format(time.RFC3339), ok: ok})
+		})
+	}
+}

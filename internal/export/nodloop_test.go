@@ -40,6 +40,8 @@ func TestNodloop(t *testing.T) {
 		verdict(t, "v1", ledger.VerdictFail, "sess-1"),
 		verdict(t, "v2", ledger.VerdictMissed),
 		entry(t, "c1", ledger.KindCorrection, ledger.Correction{VerdictID: "v1", Verdict: ledger.VerdictPass, Reason: "renamed"}),
+		entry(t, "c2", ledger.KindCorrection, ledger.Correction{VerdictID: "v1", Verdict: ledger.VerdictMissed, Reason: "my own session"}),
+		entry(t, "c3", ledger.KindCorrection, ledger.Correction{VerdictID: "v2", Verdict: ledger.VerdictFail, Reason: "it ran"}),
 	}
 	type want struct {
 		calls     []string
@@ -56,6 +58,8 @@ func TestNodloop(t *testing.T) {
 			"feedback outcome --trace r2 --result refuted --reviewer rindcut --note rindcut price-watch@2026-10-08T09:00:00-04:00",
 			"trace list --session sess-1",
 			"feedback outcome --trace r2 --result confirmed --reviewer rindcut --note rindcut correction of price-watch@2026-10-08T09:00:00-04:00: renamed",
+			"trace list --session sess-1",
+			"feedback outcome --trace r2 --result inconclusive --reviewer rindcut --note rindcut correction of price-watch@2026-10-08T09:00:00-04:00: my own session",
 		}}},
 		{name: "a refused outcome is permanent", exit: "3", want: want{calls: []string{
 			"trace list --session sess-1",

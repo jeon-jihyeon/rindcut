@@ -30,7 +30,7 @@ type CheckInput struct {
 	URL      string `json:"url,omitempty" jsonschema:"http: URL to GET. No credentials are sent, use a command check for anything behind auth"`
 	Status   int    `json:"status,omitempty" jsonschema:"http: expected status, default 200"`
 	Contains string `json:"contains,omitempty" jsonschema:"http: text the body must contain"`
-	Run      string `json:"run,omitempty" jsonschema:"command: shell line run in the job folder, exit 0 means pass. Must not print secrets"`
+	Run      string `json:"run,omitempty" jsonschema:"command: shell line run in the job folder, exit 0 means pass and 75 means it couldn't look right now. Must not print secrets"`
 	Timeout  string `json:"timeout,omitempty" jsonschema:"http or command: Go duration like 90s, default 30s for http and 60s for command"`
 }
 

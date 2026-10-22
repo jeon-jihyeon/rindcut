@@ -102,7 +102,7 @@ func (a App) Preview(ctx context.Context, j job.Job) (Preview, error) {
 	if err != nil {
 		return Preview{}, err
 	}
-	j = nextRevision(entries, j)
+	j = a.Judge().Pin(nextRevision(entries, j))
 	if err := j.Validate(); err != nil {
 		return Preview{}, err
 	}
@@ -135,7 +135,7 @@ func (a App) Save(ctx context.Context, j job.Job) (Saved, error) {
 	if err != nil {
 		return Saved{}, err
 	}
-	j = nextRevision(entries, j)
+	j = a.Judge().Pin(nextRevision(entries, j))
 	if err := j.Validate(); err != nil {
 		return Saved{}, err
 	}

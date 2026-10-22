@@ -82,6 +82,16 @@ func (j *Judgment) trimMessage() bool {
 	return true
 }
 
+// shortened keeps the first and the last quarter of text, since a command prints the reason for a failure last
+// Each call makes text strictly shorter, so the trimming loop always ends
 func shortened(text string) string {
-	return strings.ToValidUTF8(text[:len(text)/2], "")
+	keep := len(text) / 4
+	head := strings.ToValidUTF8(text[:keep], "")
+	tail := strings.ToValidUTF8(text[len(text)-keep:], "")
+	if len(head)+len(cutMark)+len(tail) >= len(text) {
+		return head + tail
+	}
+	return head + cutMark + tail
 }
+
+const cutMark = "…"

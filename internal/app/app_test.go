@@ -431,3 +431,25 @@ func TestLedgerDamageIsReported(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, strings.Contains(w.warn.String(), "skipped ledger line 1"))
 }
+
+func TestPreviewPins(t *testing.T) {
+	t.Parallel()
+	w := newWorld(t)
+	ctx := context.Background()
+	script := filepath.Join(w.folder, "check.sh")
+	require.NoError(t, os.WriteFile(script, []byte("test -s out/latest.csv\n"), 0o700))
+	j := w.job()
+	j.Checks = []check.Spec{{Kind: check.KindFile, Path: "out/{{date}}.csv"}, {Kind: check.KindCommand, Run: "./check.sh"}}
+	p, err := w.a.Preview(ctx, j)
+	require.NoError(t, err)
+	assert.Contains(t, p.Job.Checks[1].Scripts, script)
+
+	require.NoError(t, os.WriteFile(script, []byte("test -s \"out/$RINDCUT_DATE.csv\"\n"), 0o700))
+	_, err = w.a.Save(ctx, j)
+	assert.ErrorIs(t, err, app.ErrNoPreview, "a script edited after the preview needs a new one")
+	p, err = w.a.Preview(ctx, j)
+	require.NoError(t, err)
+	s, err := w.a.Save(ctx, j)
+	require.NoError(t, err)
+	assert.Equal(t, p.Job.Checks[1].Scripts, s.Job.Checks[1].Scripts)
+}

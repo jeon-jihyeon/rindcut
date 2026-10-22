@@ -18,18 +18,19 @@ Ask one thing at a time and skip what the owner already told you.
 3. Turn that into checks and say what each one looks at:
    - a file: `file` with `path`, use `{{date}}` for the slot's date in the job's timezone
    - a public page: `http` with `url` and `contains`
-   - a sheet, an API with auth, a database, anything else: write a small script with the owner and use a `command` check that exits 0 on success. The script must not print secrets
+   - a sheet, an API with auth, a database, anything else: write a small script with the owner and use a `command` check that exits 0 on success and 75 when it couldn't look right now, like a timeout. The script must not print secrets
 4. For a session job, ask the owner to paste the scheduled prompt and use its first line as `marker`, and the folder the task runs in as `folder`. This is how rindcut tells the scheduled run apart from a session they open by hand.
 5. Pick `grace`: how long a run normally takes, plus a margin. 30m is a fine default.
 6. Call `job_preview`. Explain the probe: what each check saw and what rindcut would conclude right now. If a check can never pass, like a wrong path, fix it with the owner and preview again.
 7. Only after the owner agrees, call `job_save` with `confirmed: true` and the same fields. The first save also schedules the checker every 5 minutes; tell them it's running.
 
-To change a job, preview it with its `id` and the new fields, show what changed, then save. To stop one, use `job_remove`.
+To change a job, preview it with its `id` and the new fields, show what changed, then save. After the owner edits a check script, preview and save the job again: rindcut pins each script, and a changed one makes its check inconclusive. To stop one, use `job_remove`.
 
 ## Explain results
 
 - "Did it work?", "why did it fail?": call `verdicts` for that job. Explain the failing check from its evidence: the path it looked at, whether it existed, the size, the status code, the command's exit code and output.
-- `missed` means the job expects a local session and none matched in its window, so it likely never ran. `inconclusive` means a check couldn't look, like no network, so nothing is known.
+- `missed` means the job expects a local session and none matched in its window, so it likely never ran.
+- `inconclusive` means a check couldn't look, like no network, a busy site answering 503 or 429, a script that exited 75, a script changed since the job was saved, or an undated file rewritten after a later run's time, so nothing is known.
 - A verdict with the note that no session matched but all checks passed: the work exists, but the marker or folder may be off. Offer to fix the job.
 - If the owner says a verdict is wrong, call `correct` with their reason and their name in `by`. The original stays on record.
 

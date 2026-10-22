@@ -52,7 +52,7 @@ func NewNodloop(bin string, entries []ledger.Entry) *Nodloop {
 
 func (n *Nodloop) Name() string { return NameNodloop }
 
-// nodloop keeps the latest outcome per run, so a resend or a correction just restates it
+// nodloop keeps the latest outcome per run, so a resend restates it and a correction replaces it
 func (n *Nodloop) Export(ctx context.Context, entries []ledger.Entry) error {
 	for _, e := range entries {
 		j, verdict, note, ok := n.target(e)
@@ -83,11 +83,13 @@ func (n *Nodloop) Export(ctx context.Context, entries []ledger.Entry) error {
 	return nil
 }
 
-// missed has no run to cite, so it has no outcome
+// A missed verdict has no session, so missed only reaches a run through a correction
+// That correction says the session wasn't the scheduled run, and inconclusive withdraws the outcome sent for it
 var nodloopResult = map[ledger.Verdict]string{
 	ledger.VerdictPass:         "confirmed",
 	ledger.VerdictFail:         "refuted",
 	ledger.VerdictInconclusive: "inconclusive",
+	ledger.VerdictMissed:       "inconclusive",
 }
 
 func (n *Nodloop) target(e ledger.Entry) (ledger.Judgment, ledger.Verdict, string, bool) {

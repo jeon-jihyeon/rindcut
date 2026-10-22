@@ -24,6 +24,9 @@ func runFile(s Spec, env Env) Result {
 	observed["exists"] = true
 	observed["size"] = info.Size()
 	observed["mtime"] = info.ModTime().UTC().Format(time.RFC3339)
+	if s.fresh() && !env.Next.IsZero() {
+		observed["next_slot"] = env.Next.UTC().Format(time.RFC3339)
+	}
 	switch {
 	case info.IsDir():
 		r.Status, r.Message = StatusFail, path+" is a folder, not a file"
@@ -32,6 +35,10 @@ func runFile(s Spec, env Env) Result {
 	case s.fresh() && info.ModTime().Before(env.Slot):
 		r.Status, r.Message = StatusFail, fmt.Sprintf("%s was last changed %s, before the slot at %s",
 			path, info.ModTime().Format(time.RFC3339), env.Slot.Format(time.RFC3339))
+	// A later run may have written it, so it can't prove this slot's run
+	case s.fresh() && !env.Next.IsZero() && !info.ModTime().Before(env.Next):
+		r.Status, r.Message = StatusError, fmt.Sprintf("%s was last changed %s, at or after the next slot at %s, so a later run may have written it",
+			path, info.ModTime().Format(time.RFC3339), env.Next.Format(time.RFC3339))
 	default:
 		r.Status, r.Message = StatusPass, path+" is there"
 	}
