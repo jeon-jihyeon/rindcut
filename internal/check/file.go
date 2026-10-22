@@ -35,7 +35,7 @@ func runFile(s Spec, env Env) Result {
 	case s.fresh() && info.ModTime().Before(env.Slot):
 		r.Status, r.Message = StatusFail, fmt.Sprintf("%s was last changed %s, before the slot at %s",
 			path, info.ModTime().Format(time.RFC3339), env.Slot.Format(time.RFC3339))
-	// A later run may have written it, so it can't prove this slot's run
+	// A file changed at or after the next slot may be a later run's output, so it can't prove this one
 	case s.fresh() && !env.Next.IsZero() && !info.ModTime().Before(env.Next):
 		r.Status, r.Message = StatusError, fmt.Sprintf("%s was last changed %s, at or after the next slot at %s, so a later run may have written it",
 			path, info.ModTime().Format(time.RFC3339), env.Next.Format(time.RFC3339))

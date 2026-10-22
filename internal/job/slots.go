@@ -22,6 +22,10 @@ func (s Slot) Key() string {
 // 1. A time a DST gap skips has no slot
 // 2. A time a DST overlap repeats has one slot, at its first occurrence
 func (j Job) Slots(from, to time.Time) ([]Slot, error) {
+	return j.slots(from, to, false)
+}
+
+func (j Job) slots(from, to time.Time, firstOnly bool) ([]Slot, error) {
 	sched, err := parseSchedule(j.Schedule)
 	if err != nil {
 		return nil, err
@@ -50,26 +54,24 @@ func (j Job) Slots(from, to time.Time) ([]Slot, error) {
 					continue
 				}
 				out = append(out, Slot{JobID: j.ID, At: at, End: at.Add(time.Duration(j.Grace))})
+				if firstOnly {
+					return out, nil
+				}
 			}
 		}
 	}
 	return out, nil
 }
 
-// Next is the first slot after t
-// A month ahead covers most schedules and a year the rest, so false means none fires within a year
+// Next is the first slot after t within a year
+// It stops at the first match, so a frequent schedule doesn't build a year of slots
 func (j Job) Next(t time.Time) (Slot, bool) {
 	from := t.Add(time.Nanosecond)
-	for _, to := range []time.Time{from.AddDate(0, 1, 1), from.AddDate(1, 0, 1)} {
-		slots, err := j.Slots(from, to)
-		if err != nil {
-			return Slot{}, false
-		}
-		if len(slots) > 0 {
-			return slots[0], true
-		}
+	slots, err := j.slots(from, from.AddDate(1, 0, 1), true)
+	if err != nil || len(slots) == 0 {
+		return Slot{}, false
 	}
-	return Slot{}, false
+	return slots[0], true
 }
 
 // wallTime is the instant a local clock shows h:m on day

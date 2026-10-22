@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -43,7 +42,7 @@ type Spec struct {
 	// command
 	Run     string   `json:"run,omitempty"`
 	Timeout Duration `json:"timeout,omitempty"`
-	// Scripts maps each script file the command runs to its sha256 when the job was saved
+	// Scripts maps each script path a command runs to its hash at save time, so an unreviewed edit makes the check an error
 	Scripts map[string]string `json:"scripts,omitempty"`
 }
 
@@ -52,7 +51,7 @@ var placeholder = regexp.MustCompile(`\{\{\s*([^{}]*?)\s*\}\}`)
 // Template variables a check field may use
 var variables = map[string]bool{"date": true, "yesterday": true, "slot": true, "job": true}
 
-// Template variables and environment names whose value changes with the slot
+// Template variables and environment variables whose value changes per slot
 var (
 	slotVariable = regexp.MustCompile(`\{\{\s*(date|yesterday|slot)\s*\}\}`)
 	slotEnv      = regexp.MustCompile(`RINDCUT_(SLOT|DATE)`)
@@ -102,8 +101,8 @@ func (s Spec) validateKind() error {
 	return nil
 }
 
-// SlotFree is true when the check would give the same answer for every slot, so its pass proves nothing about one run
-// A pinned script that can't be read counts as tied to the slot, so a read failure never raises a false warning
+// SlotFree is true for a check that looks the same for every slot, so it can't prove any one run happened
+// An unreadable script counts as using the slot, so it never raises a false warning
 func (s Spec) SlotFree() bool {
 	switch s.Kind {
 	case KindFile:
@@ -115,8 +114,7 @@ func (s Spec) SlotFree() bool {
 			return false
 		}
 		for path := range s.Scripts {
-			text, err := os.ReadFile(path)
-			if err != nil || slotEnv.Match(text) {
+			if scriptUsesSlot(path) {
 				return false
 			}
 		}

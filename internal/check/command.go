@@ -14,10 +14,10 @@ import (
 const (
 	// Each stream keeps this much of its start and as much of its end
 	keptOutput = 2 << 10
-	// Exit codes for a check that couldn't look
-	exitTempFail      = 75 // EX_TEMPFAIL of sysexits.h, the owner's script saying try later
-	exitNotExecutable = 126
-	exitNotFound      = 127
+	// Exit codes that mean the check couldn't look, so they become an error the judge reads as inconclusive, never a fail
+	exitTempFail      = 75  // EX_TEMPFAIL in sysexits.h: the command says it couldn't look right now, like an API that timed out
+	exitNotExecutable = 126 // the shell found the command but couldn't execute it
+	exitNotFound      = 127 // the shell couldn't find the command
 )
 
 // Runs through sh so the owner's own pipes and scripts work as typed
@@ -72,8 +72,8 @@ func runCommand(ctx context.Context, s Spec, env Env) Result {
 	return r
 }
 
-// capped keeps the first and the last limit bytes of a stream and counts the rest
-// A test runner prints the reason for a failure last, so the end matters as much as the start
+// capped keeps the first and the last limit bytes of a stream and counts the rest, so a chatty command can't bloat the ledger
+// The tail is kept because a failing command usually prints why at its end
 type capped struct {
 	head, tail []byte
 	limit      int
@@ -100,7 +100,8 @@ func (c *capped) Write(p []byte) (int, error) {
 
 func (c *capped) cut() bool { return c.total > len(c.head)+len(c.tail) }
 
-// Either cut may land inside a UTF-8 character, which is dropped so the ledger stays valid JSON text
+// Either cut may land inside a UTF-8 character, whose fragment is dropped so the ledger stays valid JSON text
+// A marker between head and tail says how many bytes were cut
 func (c *capped) String() string {
 	if !c.cut() {
 		return strings.ToValidUTF8(string(c.head)+string(c.tail), "")

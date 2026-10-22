@@ -238,3 +238,38 @@ func TestTickReportExport(t *testing.T) {
 		assert.Contains(t, res.stdout, tc.want, tc.name)
 	}
 }
+
+func TestReportDetails(t *testing.T) {
+	t.Parallel()
+	tcs := []struct {
+		name   string
+		judged bool
+		want   string
+	}{
+		{name: "unjudged counts", want: "1 closed slots with no verdict, 0 past the lookback"},
+		{name: "late session", judged: true, want: "a session started late at 2026-10-08T09:35:00Z"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			h, folder := newHome(t), t.TempDir()
+			seed(t, h, folder)
+			if tc.judged {
+				l := ledger.Open(filepath.Join(h, "ledger.jsonl"), filepath.Join(h, "ledger.lock"),
+					func() time.Time { return now }, "test", func(n int, err error) { t.Errorf("line %d: %v", n, err) })
+				slot := now.Add(-40 * time.Minute)
+				_, err := l.Append(context.Background(), ledger.KindVerdict, ledger.Judgment{
+					JobID: "price", JobRevision: 1, SlotKey: "price@2026-10-08T09:00:00Z", Slot: slot,
+					WindowEnd: slot.Add(30 * time.Minute), Verdict: ledger.VerdictMissed})
+				require.NoError(t, err)
+				_, err = l.Append(context.Background(), ledger.KindSession, ledger.Session{
+					SessionID: "s1", Cwd: folder, StartedAt: now.Add(-5 * time.Minute), FirstPrompt: "오늘 가격 수집해줘"})
+				require.NoError(t, err)
+			}
+			r := cli(t, h, "", "report")
+			assert.Equal(t, 0, r.code)
+			assert.Empty(t, r.stderr)
+			assert.Contains(t, r.stdout, tc.want)
+		})
+	}
+}

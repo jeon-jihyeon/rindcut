@@ -94,7 +94,7 @@ type Preview struct {
 	NextSlots []time.Time     `json:"next_slots"`
 	Probe     ledger.Judgment `json:"probe"`
 	ProbeID   string          `json:"probe_id"`
-	// Warnings name the checks that give the same answer every slot, so their pass proves nothing about one run
+	// Warnings names each check that looks at nothing tied to the slot, so it can't prove any one run
 	Warnings []string `json:"warnings"`
 }
 
@@ -104,10 +104,11 @@ func (a App) Preview(ctx context.Context, j job.Job) (Preview, error) {
 	if err != nil {
 		return Preview{}, err
 	}
-	j = a.Judge().Pin(nextRevision(entries, j))
+	j = nextRevision(entries, j)
 	if err := j.Validate(); err != nil {
 		return Preview{}, err
 	}
+	j = a.Judge().Pin(j)
 	now := a.Now()
 	slots, err := j.Slots(now, now.AddDate(0, 2, 0))
 	if err != nil {
@@ -142,10 +143,11 @@ func (a App) Save(ctx context.Context, j job.Job) (Saved, error) {
 	if err != nil {
 		return Saved{}, err
 	}
-	j = a.Judge().Pin(nextRevision(entries, j))
+	j = nextRevision(entries, j)
 	if err := j.Validate(); err != nil {
 		return Saved{}, err
 	}
+	j = a.Judge().Pin(j)
 	if !previewed(entries, Fingerprint(j), a.Now()) {
 		return Saved{}, ErrNoPreview
 	}

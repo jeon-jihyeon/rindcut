@@ -29,7 +29,7 @@ type harness struct {
 func start(t *testing.T) *harness {
 	t.Helper()
 	h := &harness{folder: t.TempDir()}
-	now := time.Date(2026, 10, 8, 9, 10, 0, 0, time.FixedZone("EDT", -4*3600))
+	now := time.Date(2026, 10, 8, 9, 10, 0, 0, time.UTC)
 	userHome := t.TempDir()
 	a := app.App{
 		Home: home.Dir(t.TempDir()), UserHome: userHome, Now: func() time.Time { return now }, Version: "test", Warn: os.Stderr,
@@ -61,15 +61,31 @@ func (h *harness) call(t *testing.T, name string, args map[string]any) (map[stri
 	}
 	var out any
 	require.NoError(t, json.Unmarshal([]byte(text), &out), text)
-	if m, ok := out.(map[string]any); ok {
-		return m, ""
+	m, ok := out.(map[string]any)
+	require.True(t, ok, "successful MCP structured output must be an object")
+	b, err := json.Marshal(res.StructuredContent)
+	require.NoError(t, err)
+	assert.JSONEq(t, text, string(b))
+	return m, ""
+}
+
+func TestEmptyLists(t *testing.T) {
+	t.Parallel()
+	tcs := []struct{ name string }{{name: "job_list"}, {name: "verdicts"}}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			h := start(t)
+			out, msg := h.call(t, tc.name, map[string]any{})
+			assert.Empty(t, msg)
+			assert.Equal(t, map[string]any{"items": []any{}}, out)
+		})
 	}
-	return map[string]any{"list": out}, ""
 }
 
 func (h *harness) jobArgs(extra map[string]any) map[string]any {
 	args := map[string]any{
-		"name": "가격 수집", "schedule": "0 9 * * *", "timezone": "America/New_York", "grace": "30m",
+		"name": "가격 수집", "schedule": "0 9 * * *", "timezone": "UTC", "grace": "30m",
 		"evidence": "session", "folder": h.folder, "marker": "오늘 가격 수집해줘",
 		"checks": []any{map[string]any{"kind": "file", "path": "out/{{date}}.csv"}},
 	}
@@ -85,10 +101,6 @@ func TestTools(t *testing.T) {
 	res, err := h.sess.ListTools(context.Background(), nil)
 	require.NoError(t, err)
 	names := []string{}
-	types := map[string]any{
-		"job_preview": "object", "job_save": "object", "job_list": []any{"null", "array"}, "job_remove": "object", "verdicts": []any{"null", "array"},
-		"correct": "object", "report": "object", "exporter_set": "object", "exporter_list": "object", "status": "object",
-	}
 	for _, tl := range res.Tools {
 		names = append(names, tl.Name)
 		require.NotNil(t, tl.OutputSchema, tl.Name)
@@ -96,7 +108,14 @@ func TestTools(t *testing.T) {
 		require.NoError(t, err)
 		var schema map[string]any
 		require.NoError(t, json.Unmarshal(b, &schema))
-		assert.Equal(t, types[tl.Name], schema["type"], tl.Name)
+		assert.Equal(t, "object", schema["type"], tl.Name)
+		if tl.Name == "correct" {
+			properties, ok := schema["properties"].(map[string]any)
+			require.True(t, ok)
+			data, ok := properties["data"].(map[string]any)
+			require.True(t, ok)
+			assert.Equal(t, "object", data["type"])
+		}
 	}
 	assert.ElementsMatch(t, []string{"job_preview", "job_save", "job_list", "job_remove", "verdicts", "correct", "report",
 		"exporter_set", "exporter_list", "status"}, names)
@@ -128,7 +147,7 @@ func TestRegisterFlow(t *testing.T) {
 		assert.Contains(t, msg, s.refused, s.tool)
 	}
 	list, _ := h.call(t, "job_list", map[string]any{})
-	assert.Len(t, list["list"], 1)
+	assert.Len(t, list["items"], 1)
 	st, _ := h.call(t, "status", map[string]any{})
 	assert.Equal(t, map[string]any{"version": "test", "tick_installed": true, "jobs": float64(1)},
 		map[string]any{"version": st["version"], "tick_installed": st["tick_installed"], "jobs": st["jobs"]})
@@ -142,7 +161,7 @@ func TestPreviewProbe(t *testing.T) {
 	h := start(t)
 	out := filepath.Join(h.folder, "out")
 	require.NoError(t, os.MkdirAll(out, 0o700))
-	written := time.Date(2026, 10, 8, 9, 5, 0, 0, time.FixedZone("EDT", -4*3600))
+	written := time.Date(2026, 10, 8, 9, 5, 0, 0, time.UTC)
 	require.NoError(t, os.WriteFile(filepath.Join(out, "2026-10-08.csv"), []byte("row"), 0o600))
 	require.NoError(t, os.Chtimes(filepath.Join(out, "2026-10-08.csv"), written, written))
 	tcs := []struct {
@@ -232,7 +251,7 @@ func TestStructuredListsAndRemoval(t *testing.T) {
 	require.True(t, ok)
 	rows, msg := h.call(t, "verdicts", map[string]any{})
 	require.Empty(t, msg)
-	assert.Empty(t, rows["list"])
+	assert.Empty(t, rows["items"])
 	removed, msg := h.call(t, "job_remove", map[string]any{"id": id})
 	require.Empty(t, msg)
 	assert.Equal(t, id, removed["id"])
