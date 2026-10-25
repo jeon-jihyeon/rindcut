@@ -26,7 +26,8 @@ type Result struct {
 
 // Env is the slot a check judges and the places it resolves paths against
 type Env struct {
-	Slot time.Time
+	Input []byte
+	Slot  time.Time
 	// Next is the following slot, and a fresh file changed at or after it can't prove this slot
 	// Zero when the job has no next slot
 	Next   time.Time

@@ -78,3 +78,29 @@ func TestOTLPSendsHTTP(t *testing.T) {
 	assert.Equal(t, want, <-got)
 	assert.Equal(t, want, <-got)
 }
+
+func TestOTLPCriticStaysLocal(t *testing.T) {
+	t.Parallel()
+	tcs := []struct{ name, verdict string }{
+		{name: "approved", verdict: "approved"},
+		{name: "rejected", verdict: "rejected"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			mem := tracetest.NewInMemoryExporter()
+			o := newOTLP(mem, nil, "test")
+			entry := ent(t, "v1", ledger.KindVerdict, ledger.Judgment{JobID: "report", Slot: at,
+				Verdict: ledger.VerdictPass, Critic: &ledger.CriticResult{Source: "acme",
+					Verdict: ledger.CriticVerdict(tc.verdict), Reason: "acme local explanation"}})
+			require.NoError(t, o.Export(context.Background(), []ledger.Entry{entry}))
+			spans := mem.GetSpans()
+			require.Len(t, spans, 1)
+			assert.Equal(t, codes.Ok, spans[0].Status.Code)
+			for _, attr := range spans[0].Attributes {
+				assert.NotContains(t, string(attr.Key), "critic")
+				assert.NotContains(t, attr.Value.String(), "acme local explanation")
+			}
+		})
+	}
+}

@@ -40,10 +40,42 @@ type JobInput struct {
 	Schedule string       `json:"schedule" jsonschema:"5-field cron: minute hour day-of-month month day-of-week, like 0 9 * * mon-fri"`
 	Timezone string       `json:"timezone" jsonschema:"IANA zone like UTC"`
 	Grace    string       `json:"grace" jsonschema:"how long the run may take after its scheduled time, Go duration from 1m to 24h, like 30m"`
-	Evidence string       `json:"evidence" jsonschema:"session when the job runs as a local Claude session (Desktop scheduled task, cron claude -p, /loop), none for cloud Cowork or Routines"`
+	Evidence string       `json:"evidence" jsonschema:"session only when each local run starts a distinct session matching its folder, recorded first-prompt marker and slot window; none for cloud jobs or repeated work inside an existing session; verify Desktop prompt wrappers first"`
 	Folder   string       `json:"folder,omitempty" jsonschema:"session jobs: absolute working folder of the scheduled session"`
-	Marker   string       `json:"marker,omitempty" jsonschema:"session jobs: the first line of the scheduled prompt, exactly as the owner pasted it"`
+	Marker   string       `json:"marker,omitempty" jsonschema:"session jobs: the first line of the recorded scheduled prompt; verify host wrappers before relying on this match"`
 	Checks   []CheckInput `json:"checks" jsonschema:"1 to 10 checks of the job's real output"`
+	Critic   *CriticInput `json:"critic,omitempty" jsonschema:"optional owner-requested content evaluation, separate from objective checks and human approval"`
+}
+
+type CriterionInput struct {
+	ID   string `json:"id" jsonschema:"unique stable criterion id, 1 to 48 ASCII label characters"`
+	Text string `json:"text" jsonschema:"criterion to assess, 1 to 500 bytes with non-whitespace content"`
+}
+
+type CriticInput struct {
+	Source           string           `json:"source" jsonschema:"registered evaluator source label"`
+	SourceRevision   string           `json:"source_revision" jsonschema:"declared adapter and model configuration revision"`
+	CriteriaRevision string           `json:"criteria_revision" jsonschema:"revision of the registered criteria"`
+	Criteria         []CriterionInput `json:"criteria" jsonschema:"1 to 10 criteria, each required in the response"`
+	Run              string           `json:"run" jsonschema:"owner-reviewed read-only shell command using rindcut.critic/v1 JSON stdin and stdout, same OS privileges as command checks"`
+	Timeout          string           `json:"timeout,omitempty" jsonschema:"Go duration, default 60s, maximum 10m"`
+	RetainReason     bool             `json:"retain_reason,omitempty" jsonschema:"explicit permission to store up to 1024 bytes of explanation and return it in CLI or MCP queries; the host may forward it; false by default; omitted by built-in exporters"`
+}
+
+func (in CriticInput) critic() (*job.Critic, error) {
+	c := &job.Critic{Source: in.Source, SourceRevision: in.SourceRevision, CriteriaRevision: in.CriteriaRevision,
+		Command: check.Spec{Kind: check.KindCommand, Run: in.Run}, RetainReason: in.RetainReason}
+	for _, criterion := range in.Criteria {
+		c.Criteria = append(c.Criteria, job.Criterion{ID: criterion.ID, Text: criterion.Text})
+	}
+	if in.Timeout != "" {
+		d, err := time.ParseDuration(in.Timeout)
+		if err != nil {
+			return nil, fmt.Errorf("critic timeout %q: %w", in.Timeout, err)
+		}
+		c.Command.Timeout = check.Duration(d)
+	}
+	return c, nil
 }
 
 func (in JobInput) job() (job.Job, error) {
@@ -66,6 +98,12 @@ func (in JobInput) job() (job.Job, error) {
 			spec.Timeout = check.Duration(d)
 		}
 		j.Checks = append(j.Checks, spec)
+	}
+	if in.Critic != nil {
+		j.Critic, err = in.Critic.critic()
+		if err != nil {
+			return job.Job{}, err
+		}
 	}
 	return j, nil
 }
@@ -122,7 +160,7 @@ func since(text string, fallback time.Duration) (time.Duration, error) {
 // New builds the server with every tool bound to a
 func New(a app.App) *sdk.Server {
 	srv := sdk.NewServer(&sdk.Implementation{Name: "rindcut", Version: a.Version}, nil)
-	add(srv, "job_preview", "Validate a scheduled job, list its next 3 runs and check its latest past run right now without counting it. This runs the job's checks on this machine now: command checks execute as shell commands in the job folder, http checks make requests. Show the owner the probe and each warning in plain words before saving."+dataNote,
+	add(srv, "job_preview", "Validate a scheduled job, list its next 3 runs and check its latest past run right now without counting it. This runs objective checks and an optional critic on this machine now: shell commands run with your OS privileges and may access the network. Register a critic only after the owner requests it and reviews evidence access, external transmission and retention. Show objective and content judgments separately; neither proves human approval. Show the owner the probe and each warning before saving."+dataNote,
 		func(ctx context.Context, in JobInput) (app.Preview, error) {
 			j, err := in.job()
 			if err != nil {

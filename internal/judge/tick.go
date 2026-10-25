@@ -67,7 +67,7 @@ func (j Judge) Tick(ctx context.Context) (TickResult, error) {
 			out.Backfilled, backfilled = n, true
 			matched = st.matching(r, s)
 		}
-		p := judgment(r, s, j.run(ctx, r, s), matched, TriggerTick)
+		p := j.judge(ctx, r, s, matched, TriggerTick)
 		if len(matched) > 0 {
 			p.RunID = st.sessions[matched[len(matched)-1]].RunID
 		}
@@ -94,7 +94,7 @@ func (j Judge) Probe(ctx context.Context, r job.Job, at time.Time, fingerprint s
 	if err != nil {
 		return ledger.Entry{}, err
 	}
-	p := judgment(r, s, j.run(ctx, r, s), st.matching(r, s), TriggerCheck)
+	p := j.judge(ctx, r, s, st.matching(r, s), TriggerCheck)
 	if len(p.Sessions) > 0 {
 		p.RunID = st.sessions[p.Sessions[len(p.Sessions)-1]].RunID
 	}
@@ -103,11 +103,7 @@ func (j Judge) Probe(ctx context.Context, r job.Job, at time.Time, fingerprint s
 }
 
 func (j Judge) run(ctx context.Context, r job.Job, s job.Slot) []check.Result {
-	env := j.env(r)
-	env.Slot = s.At
-	if next, ok := r.Next(s.At); ok {
-		env.Next = next.At
-	}
+	env := j.slotEnv(r, s)
 	out := make([]check.Result, len(r.Checks))
 	for i, c := range r.Checks {
 		out[i] = check.Run(ctx, c, env)
@@ -123,7 +119,28 @@ func (j Judge) Pin(r job.Job) job.Job {
 		checks[i] = c.Pinned(env)
 	}
 	r.Checks = checks
+	if r.Critic != nil {
+		critic := *r.Critic
+		critic.Command = critic.Command.Pinned(env)
+		r.Critic = &critic
+	}
 	return r
+}
+
+func (j Judge) judge(ctx context.Context, r job.Job, s job.Slot, matched []string, trigger string) ledger.Judgment {
+	results := j.run(ctx, r, s)
+	out := judgment(r, s, results, matched, trigger)
+	out.Critic = j.evaluate(ctx, r, s, results)
+	return out
+}
+
+func (j Judge) slotEnv(r job.Job, s job.Slot) check.Env {
+	env := j.env(r)
+	env.Slot = s.At
+	if next, ok := r.Next(s.At); ok {
+		env.Next = next.At
+	}
+	return env
 }
 
 func (j Judge) env(r job.Job) check.Env {

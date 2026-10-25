@@ -81,14 +81,14 @@ func tick(c call) error {
 	if err != nil {
 		return err
 	}
-	t := output.Table{Header: []string{"SLOT", "VERDICT", "NOTE"}}
+	t := output.Table{Header: []string{"SLOT", "VERDICT", "CRITIC", "NOTE"}}
 	if r.Busy {
-		t.Rows = append(t.Rows, []string{"-", "busy", "another tick is running"})
+		t.Rows = append(t.Rows, []string{"-", "busy", "-", "another tick is running"})
 	}
 	for _, e := range r.Verdicts {
 		var j ledger.Judgment
 		if e.Decode(&j) == nil {
-			t.Rows = append(t.Rows, []string{j.SlotKey, string(j.Verdict), j.Note})
+			t.Rows = append(t.Rows, []string{j.SlotKey, string(j.Verdict), criticStatus(j.Critic), j.Note})
 		}
 	}
 	return c.show(r, t)
@@ -144,7 +144,17 @@ func probe(c call) error {
 		t.Rows = append(t.Rows, []string{r.Kind, r.Status, r.Message})
 	}
 	t.Rows = append(t.Rows, []string{"verdict", string(p.Verdict), p.Note})
+	if p.Critic != nil {
+		t.Rows = append(t.Rows, []string{"critic " + p.Critic.Source, string(p.Critic.Verdict), p.Critic.Cause})
+	}
 	return c.show(p, t)
+}
+
+func criticStatus(c *ledger.CriticResult) string {
+	if c == nil {
+		return "-"
+	}
+	return string(c.Verdict)
 }
 
 func jobs(c call) error {
@@ -191,6 +201,10 @@ func report(c call) error {
 			reason += ", a session started late at " + p.LateStart.StartedAt.Format(time.RFC3339)
 		}
 		t.Rows = append(t.Rows, []string{p.SlotKey, string(p.Verdict), reason})
+	}
+	for _, p := range r.CriticProblems {
+		t.Rows = append(t.Rows, []string{p.SlotKey, "critic " + string(p.Critic.Verdict),
+			p.Critic.Source + " " + p.Critic.CriteriaRevision + " " + p.Critic.Cause})
 	}
 	for _, id := range r.Silent {
 		g := r.Unjudged[id]

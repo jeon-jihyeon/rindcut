@@ -43,7 +43,7 @@ Ask any time:
 |---|---|
 | `pass` | every check passed |
 | `fail` | a check looked and the output isn't right |
-| `missed` | the job runs on this machine and no matching session started in its window, so it likely never ran |
+| `missed` | an objective check failed and no local session matched the configured folder, prompt marker and window |
 | `inconclusive` | a check couldn't look, like no network, so nothing is known. Never counted as a failure |
 
 A slot is judged once its window closes, against the job as it was at that time, so a later edit never rewrites an earlier verdict.
@@ -61,9 +61,11 @@ schedule → Claude session → output on disk, a page or anything a script read
 ```
 
 - Job: a name, a schedule with its timezone and grace, and the checks that prove it worked. `file` looks at a path with `{{date}}` for the slot's date, `http` looks for text on a page, and `command` runs a script that exits 0 on success
-- Session match: for a job that runs on this machine, a session counts only when it started in the job's folder, inside the slot's window, with the scheduled prompt's first line. A session you open by hand there doesn't count
+- Session match: for a job that runs on this machine, a session counts only when it started in the job's folder, inside the slot's window, with the scheduled prompt's first line. Desktop prompt wrappers, a missing hook or an incorrect marker can prevent matching; `missed` does not prove the job never ran
 - Cloud jobs: a Cowork schedule or a Routine is judged from its output alone, so missed and fail read the same
 - Ledger: `~/.rindcut/ledger.jsonl`, append only. Corrections are new entries. Only sessions in a job's folder are recorded, and only verdicts and corrections leave the machine
+
+An optional external critic evaluates registered content criteria after every objective check passes. Its judgment stays separate from the objective verdict and never grants human approval. Critic records stay out of the built-in exporters; explanations are stored and returned in CLI or MCP queries only with the owner's explicit retention choice.
 
 ## Exporters
 
