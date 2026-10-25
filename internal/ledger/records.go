@@ -67,6 +67,7 @@ type Judgment struct {
 	WindowEnd   time.Time     `json:"window_end"`
 	Verdict     Verdict       `json:"verdict"`
 	Checks      []CheckRecord `json:"checks"`
+	Critic      *CriticResult `json:"critic,omitempty"`
 	Sessions    []string      `json:"sessions,omitempty"`
 	// RunID is the run id of the last matched session, which the nodloop exporter prefers over a match by time
 	RunID   string `json:"run_id,omitempty"`

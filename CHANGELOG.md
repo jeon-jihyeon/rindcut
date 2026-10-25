@@ -2,6 +2,23 @@
 
 All notable changes to rindcut are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] - 2026-10-25
+
+### Added
+
+- Optional content evaluation after objective checks pass, using registered criteria and a versioned adapter response
+- Separate content judgments in reports, CLI output and MCP results, without changing objective verdicts or built-in exports
+- Explicit explanation retention with bounded results; raw critic output stays out of the ledger
+
+### Changed
+
+- Describe a missed slot as unmatched session evidence rather than proof that a job never ran
+- Explain the evidence access and transmission boundaries of external critic commands before registration
+
+### Fixed
+
+- Serialize job definition changes so concurrent saves and removals keep distinct revisions
+
 ## [0.1.0] - 2026-10-22
 
 ### Added
@@ -33,4 +50,5 @@ All notable changes to rindcut are listed here. The format follows [Keep a Chang
 - Command checks that could panic when the process never started
 - A missed slot corrected by the owner now withdraws the nodloop outcome sent for its session
 
+[0.1.1]: https://github.com/jeon-jihyeon/rindcut/releases/tag/v0.1.1
 [0.1.0]: https://github.com/jeon-jihyeon/rindcut/releases/tag/v0.1.0

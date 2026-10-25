@@ -16,7 +16,7 @@ const noSessionNote = "no session matched the job folder, marker and window"
 // Decide combines check results with session evidence
 // 1. Outputs win: every check passing is a pass even with no matched session
 // 2. One clear failure beats any number of errors
-// 3. A failure with no session for a session job means the job never ran
+// 3. A failure without a matching session is missed for a session job
 func Decide(results []check.Result, ev job.Evidence, matched bool) (ledger.Verdict, string) {
 	failed, errored := false, false
 	for _, r := range results {
@@ -42,8 +42,7 @@ func Decide(results []check.Result, ev job.Evidence, matched bool) (ledger.Verdi
 	}
 }
 
-// Matches says whether a session ran the job's slot
-// Folder, start time and first prompt line all have to agree, so a hand-opened session in the same folder never counts
+// Session evidence binds recorded fields without identifying the scheduler
 func Matches(j job.Job, s job.Slot, sess ledger.Session) bool {
 	if sess.StartedAt.Before(s.At) || sess.StartedAt.After(s.End) {
 		return false

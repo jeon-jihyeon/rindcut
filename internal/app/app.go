@@ -139,6 +139,11 @@ type Saved struct {
 
 // Save records a job revision the owner previewed and keeps the tick scheduled
 func (a App) Save(ctx context.Context, j job.Job) (Saved, error) {
+	unlock, err := lock.Acquire(ctx, a.Home.Lock("jobs"), time.Second)
+	if err != nil {
+		return Saved{}, fmt.Errorf("job definition busy or unavailable, try save again: %w", err)
+	}
+	defer unlock()
 	entries, err := a.Ledger().All(ctx)
 	if err != nil {
 		return Saved{}, err
@@ -190,6 +195,11 @@ func previewed(entries []ledger.Entry, fingerprint string, now time.Time) bool {
 
 // Remove writes a removing revision, keeping the job's history
 func (a App) Remove(ctx context.Context, id string) (job.Job, error) {
+	unlock, err := lock.Acquire(ctx, a.Home.Lock("jobs"), time.Second)
+	if err != nil {
+		return job.Job{}, fmt.Errorf("job definition busy or unavailable, try remove again: %w", err)
+	}
+	defer unlock()
 	entries, err := a.Ledger().All(ctx)
 	if err != nil {
 		return job.Job{}, err

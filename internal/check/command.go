@@ -1,6 +1,7 @@
 package check
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -33,6 +34,9 @@ func runCommand(ctx context.Context, s Spec, env Env) Result {
 	}
 	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", line)
 	cmd.Dir = env.dir()
+	if env.Input != nil {
+		cmd.Stdin = bytes.NewReader(env.Input)
+	}
 	cmd.Env = append(os.Environ(),
 		"RINDCUT_JOB="+env.JobID,
 		"RINDCUT_SLOT="+env.Slot.Format(time.RFC3339),

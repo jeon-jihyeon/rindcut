@@ -47,6 +47,7 @@ type Job struct {
 	Folder   string       `json:"folder,omitempty"`
 	Marker   string       `json:"marker,omitempty"`
 	Checks   []check.Spec `json:"checks"`
+	Critic   *Critic      `json:"critic,omitempty"`
 	Revision int          `json:"revision"`
 	Removed  bool         `json:"removed,omitempty"`
 	// Since is when the revision was recorded
@@ -73,7 +74,13 @@ func (j Job) Validate() error {
 	if err := j.validateEvidence(); err != nil {
 		return err
 	}
-	return j.validateChecks()
+	if err := j.validateChecks(); err != nil {
+		return err
+	}
+	if j.Critic != nil {
+		return j.Critic.Validate()
+	}
+	return nil
 }
 
 func (j Job) validateChecks() error {

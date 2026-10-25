@@ -39,11 +39,12 @@ type Problem struct {
 // Report sums the verdicts of slots in [Since, Until)
 // Corrections apply, so a verdict a person fixed counts as fixed
 type Report struct {
-	Since    time.Time         `json:"since"`
-	Until    time.Time         `json:"until"`
-	Totals   Counts            `json:"totals"`
-	Jobs     map[string]Counts `json:"jobs"`
-	Problems []Problem         `json:"problems"`
+	Since          time.Time         `json:"since"`
+	Until          time.Time         `json:"until"`
+	Totals         Counts            `json:"totals"`
+	Jobs           map[string]Counts `json:"jobs"`
+	Problems       []Problem         `json:"problems"`
+	CriticProblems []CriticProblem   `json:"critic_problems"`
 }
 
 // Corrections maps each corrected verdict id to the correction in force, the latest one
@@ -60,7 +61,7 @@ func Corrections(entries []Entry) map[string]Correction {
 
 func Summary(entries []Entry, since, until time.Time) Report {
 	corrected := Corrections(entries)
-	r := Report{Since: since, Until: until, Jobs: map[string]Counts{}, Problems: []Problem{}}
+	r := Report{Since: since, Until: until, Jobs: map[string]Counts{}, Problems: []Problem{}, CriticProblems: []CriticProblem{}}
 	for _, e := range entries {
 		var j Judgment
 		if e.Kind != KindVerdict || e.Decode(&j) != nil || j.Slot.Before(since) || !j.Slot.Before(until) {
@@ -75,6 +76,11 @@ func Summary(entries []Entry, since, until time.Time) Report {
 		jc := r.Jobs[j.JobID]
 		jc.add(v)
 		r.Jobs[j.JobID] = jc
+		if j.Critic != nil && j.Critic.Verdict != CriticApproved {
+			r.CriticProblems = append(r.CriticProblems, CriticProblem{
+				VerdictID: e.ID, JobID: j.JobID, SlotKey: j.SlotKey, Slot: j.Slot, Critic: *j.Critic,
+			})
+		}
 		if v != VerdictPass {
 			r.Problems = append(r.Problems, Problem{
 				VerdictID: e.ID, JobID: j.JobID, SlotKey: j.SlotKey, Slot: j.Slot, Verdict: v, Reason: reason, Corrected: fixed,
@@ -82,6 +88,7 @@ func Summary(entries []Entry, since, until time.Time) Report {
 		}
 	}
 	sort.SliceStable(r.Problems, func(a, b int) bool { return r.Problems[a].Slot.Before(r.Problems[b].Slot) })
+	sort.SliceStable(r.CriticProblems, func(a, b int) bool { return r.CriticProblems[a].Slot.Before(r.CriticProblems[b].Slot) })
 	return r
 }
 
