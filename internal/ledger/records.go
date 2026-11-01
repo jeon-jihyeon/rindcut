@@ -8,7 +8,7 @@ type Verdict string
 const (
 	VerdictPass         Verdict = "pass"
 	VerdictFail         Verdict = "fail"
-	VerdictMissed       Verdict = "missed"       // the job expected a session and none ran
+	VerdictMissed       Verdict = "missed"       // an objective check failed without a matching session
 	VerdictInconclusive Verdict = "inconclusive" // a check couldn't read the state
 )
 

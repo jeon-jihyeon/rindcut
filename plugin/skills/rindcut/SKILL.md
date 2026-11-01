@@ -1,6 +1,6 @@
 ---
 name: rindcut
-description: Set up and review checks that scheduled AI jobs really ran and really produced their output. Use when the owner wants a scheduled job watched ("make sure the 9am price collection actually happened", "check the weekly report really lands"), asks whether a scheduled task worked, why one failed, wants yesterday's summary, wants verdicts sent to Langfuse or another tracing tool, or says a verdict was wrong.
+description: Set up and review scheduled AI job checks and metadata records from agent sources. Use when the owner wants a scheduled job watched, wants agent actions recorded through a source adapter, asks whether a task worked, wants a summary or tracing export, or says a verdict was wrong.
 ---
 
 # rindcut
@@ -30,6 +30,20 @@ To change a job, preview it with its `id` and the new fields, show what changed,
 Add an optional `critic` only when the owner requests content evaluation. Keep the scheduled job and objective checks. Show the read-only adapter command, its evidence access, possible external model transmission and timeout before previewing. Commands have the same OS privileges as other command checks; rindcut provides no read-only sandbox. Never put model credentials in the job or command text. Register `source`, `source_revision`, `criteria_revision` and each criterion's stable `id` and `text`. Explain that source revision is the declared adapter and model configuration, not independently verified model identity. Leave `retain_reason` false unless the owner explicitly agrees to storing explanations and returning them in CLI or MCP queries. Explain that the host may forward query results to its model or messenger, even though the built-in exporters omit critic records.
 
 The adapter receives `rindcut.critic/v1` JSON on stdin with `job_id`, `job_revision`, `slot`, `criteria_revision` and `criteria`. It returns one JSON object with `protocol`, the same `job_id`, `job_revision`, `slot` and `criteria_revision`, `complete: true`, and `criteria` containing exactly one `{id, verdict}` per registered criterion. Verdicts are `approved`, `revision`, `rejected` or `inconclusive`; an optional `reason` is ignored unless retention was enabled. Keep stdout within 4096 bytes, with no markdown fences or other output. The adapter must select the intended slot's evidence and respect its transmission permissions; rindcut does not snapshot artifacts or transmit check output automatically.
+
+## Observe an agent source
+
+Use the [source and observer contract](observe-contract.md) for action records outside scheduled slots. The MCP input schema exposes the source definition; the contract also covers byte limits and protocol behavior. Keep the adapter outside the core. An agent name or record type needs no new core enum.
+
+Show the owner the reader and observer programs, their arguments and evidence access, any external transmission, and the metadata retained. These programs run with the owner's OS permissions. Put credentials in the adapter's existing authentication path, never in its definition or records. Declare whether the source exposes an event stream or snapshots and explain its missing coverage.
+
+Call `source_preview` with the definition and `expected_revision` of 0 for a new source or its current revision for a change. Show the returned definition and effects. After the owner agrees, call `source_save` with the same input, `preview_digest` and `confirmed: true`. Registration does not install or start a scheduler. A running existing tick also collects enabled sources; `observe_sync` runs one bounded cycle on request.
+
+Read `observe_status` for gaps, conflicts and pending observations. Read `observe_records` with its returned cursor until `has_more` is false. Queries preserve the store and never run adapters. `source_list` omits private commands and native cursors. Preview a disabled definition to suspend future work, or use `source_remove` with its current revision and confirmation to stop it while retaining history.
+
+A source record preserves the producer's claim. An observer records its registered criterion separately. `unknown` means the observer could not establish a result; an overdue observation is not an automatic failure. A later result does not erase an earlier one. Only an explicit `supersedes` in the same series links a correction. Declared `code` or `model` actors do not certify independence or accuracy. Producer fields such as `person` or `verified` grant no human authority. No observation authorizes another action or proves a business outcome.
+
+If collection identity or generation changes, stop and show the gap. Obtain a fresh preview for an explicit backfill or reset. Preview runs no reader or observer. After confirmation and preview verification, saving a reset runs the reader once to check the requested generation; explain its access and possible side effects before asking the owner. A `new_store` recovery preserves the prior store and starts an empty one with a new identity; explain the continuity loss before confirmation.
 
 ## Explain results
 

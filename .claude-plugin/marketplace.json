@@ -7,7 +7,7 @@
     {
       "name": "rindcut",
       "source": "./plugin",
-      "description": "Checks that your scheduled AI jobs really ran and really produced what they promised, judged from the real output instead of the agent's word."
+      "description": "Checks scheduled AI jobs against their outputs and records observations from connected agent sources."
     }
   ]
 }
