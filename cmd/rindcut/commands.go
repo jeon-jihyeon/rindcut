@@ -18,21 +18,23 @@ import (
 
 // call is one command invocation with its flags still unparsed
 type call struct {
-	ctx  context.Context
-	a    app.App
-	e    env
-	fs   *flag.FlagSet
-	args []string
-	show func(v any, t output.Table) error
+	ctx    context.Context
+	a      app.App
+	e      env
+	fs     *flag.FlagSet
+	args   []string
+	asJSON bool
+	show   func(v any, t output.Table) error
 }
 
 var commands = map[string]func(c call) error{
-	"tick":   tick,
-	"check":  probe,
-	"jobs":   jobs,
-	"ledger": listLedger,
-	"report": report,
-	"export": exportNow,
+	"observe": observe,
+	"tick":    tick,
+	"check":   probe,
+	"jobs":    jobs,
+	"ledger":  listLedger,
+	"report":  report,
+	"export":  exportNow,
 	"install": func(c call) error {
 		if err := c.a.Install(c.ctx); err != nil {
 			return err
@@ -52,7 +54,7 @@ func dispatch(ctx context.Context, name string, args []string, a app.App, e env,
 	}
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(e.stderr)
-	return cmd(call{ctx: ctx, a: a, e: e, fs: fs, args: args, show: func(v any, t output.Table) error {
+	return cmd(call{ctx: ctx, a: a, e: e, fs: fs, args: args, asJSON: asJSON, show: func(v any, t output.Table) error {
 		if asJSON {
 			return output.JSON(e.stdout, v)
 		}

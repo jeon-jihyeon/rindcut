@@ -156,6 +156,8 @@ linters:
               desc: CLI handlers never assemble scheduled work
             - pkg: github.com/jeon-jihyeon/rindcut/internal/export
               desc: CLI handlers never assemble scheduled exports
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/observe
+              desc: CLI handlers never import observation rules or adapters
             - pkg: github.com/jeon-jihyeon/rindcut/internal/home
               desc: application use cases own the home
             - pkg: github.com/jeon-jihyeon/rindcut/internal/lock
