@@ -258,13 +258,14 @@ func (a App) Jobs(ctx context.Context, all bool) ([]JobView, error) {
 
 type TickResult struct {
 	// Busy means another tick held the lock and this one did nothing
-	Busy       bool    `json:"busy"`
-	Verdicts   []Entry `json:"verdicts"`
-	Backfilled int     `json:"backfilled"`
-	Lag        []Lag   `json:"lag"`
+	Busy        bool          `json:"busy"`
+	Verdicts    []Entry       `json:"verdicts"`
+	Backfilled  int           `json:"backfilled"`
+	Lag         []Lag         `json:"lag"`
+	Observation *ObserveCycle `json:"observation,omitempty"`
 }
 
-// The tick lock spans slot judgments and verdict export
+// The tick lock spans slot judgments and observation collection and verdict export
 // A slow export cannot overlap the next tick and resend or rewind its cursor
 func (a App) Tick(ctx context.Context) (TickResult, error) {
 	unlock, err := lock.Acquire(ctx, a.lockPath("tick"), 0)
@@ -281,8 +282,13 @@ func (a App) Tick(ctx context.Context) (TickResult, error) {
 	}
 	// Status must distinguish a quiet tick from a stopped one
 	_ = os.WriteFile(a.homePath("last-tick"), []byte(a.Now().UTC().Format(time.RFC3339)), 0o600)
-	lags, err := a.export(ctx, "")
-	return TickResult{Verdicts: entriesView(r.Verdicts), Backfilled: r.Backfilled, Lag: lagViews(lags)}, err
+	observed, observeErr := a.observeSync(ctx)
+	lags, exportErr := a.export(ctx, "")
+	out := TickResult{Verdicts: entriesView(r.Verdicts), Backfilled: r.Backfilled, Lag: lagViews(lags)}
+	if observed.ID != "" {
+		out.Observation = &observed
+	}
+	return out, errors.Join(observeErr, exportErr)
 }
 
 // Export retries eligible scheduled records under the tick lock

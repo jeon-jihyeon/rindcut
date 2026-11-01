@@ -221,10 +221,15 @@ func New(a app.App) *sdk.Server {
 		})
 	add(srv, "status", "rindcut version, home, whether the checker is scheduled and when it last ran.",
 		func(ctx context.Context, _ Empty) (app.Status, error) { return a.Status(ctx) })
+	addObserve(srv, a)
 	return srv
 }
 
 func add[In, Out any](srv *sdk.Server, name, description string, h func(context.Context, In) (Out, error)) {
+	addInput(srv, name, description, nil, h)
+}
+
+func addInput[In, Out any](srv *sdk.Server, name, description string, input any, h func(context.Context, In) (Out, error)) {
 	schema, err := jsonschema.For[Out](&jsonschema.ForOptions{TypeSchemas: map[reflect.Type]*jsonschema.Schema{
 		reflect.TypeFor[app.Duration]():    {Type: "string"},
 		reflect.TypeFor[json.RawMessage](): {Type: "object"},
@@ -232,7 +237,7 @@ func add[In, Out any](srv *sdk.Server, name, description string, h func(context.
 	if err != nil {
 		panic(fmt.Sprintf("tool %s output schema: %v", name, err))
 	}
-	sdk.AddTool(srv, &sdk.Tool{Name: name, Description: description, OutputSchema: schema},
+	sdk.AddTool(srv, &sdk.Tool{Name: name, Description: description, InputSchema: input, OutputSchema: schema},
 		func(ctx context.Context, _ *sdk.CallToolRequest, in In) (*sdk.CallToolResult, Out, error) {
 			out, err := h(ctx, in)
 			return nil, out, err

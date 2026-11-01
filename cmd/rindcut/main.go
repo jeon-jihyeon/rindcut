@@ -1,4 +1,4 @@
-// Command rindcut checks scheduled job outputs
+// Command rindcut checks scheduled job outputs and records observations from connected agent sources
 package main
 
 import (
@@ -28,6 +28,9 @@ commands:
   ledger [flags]        list ledger entries
   report [--since D]    summary of verdicts, problems, silent jobs and export lag
   export [flags]        send new entries to the exporters
+  observe sync          collect source records and run due observations
+  observe records       query observation records as JSONL, with a final page row
+  observe status        show source coverage, gaps and unresolved observations
   install | uninstall   schedule or unschedule the tick
   status                version, home and tick state
   mcp                   serve the MCP tools over stdio, for the Claude Code plugin
@@ -74,7 +77,7 @@ func run(args []string, e env) int {
 		}
 		return 0
 	}
-	a, err := newApp(e)
+	a, err := commandApp(e, name, rest)
 	if err == nil {
 		err = dispatch(context.Background(), name, rest, a, e, asJSON)
 	}
@@ -94,9 +97,16 @@ func run(args []string, e env) int {
 }
 
 func newApp(e env) (app.App, error) {
+	return commandApp(e, "", nil)
+}
+
+func commandApp(e env, name string, args []string) (app.App, error) {
 	a, err := app.New(e.getenv, e.now, version, e.stderr)
 	if err != nil {
 		return app.App{}, err
+	}
+	if name == "observe" && len(args) > 0 && (args[0] == "records" || args[0] == "status") {
+		return a, nil
 	}
 	return a, a.Ready()
 }

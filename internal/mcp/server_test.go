@@ -116,7 +116,8 @@ func TestTools(t *testing.T) {
 		}
 	}
 	assert.ElementsMatch(t, []string{"job_preview", "job_save", "job_list", "job_remove", "verdicts", "correct", "report",
-		"exporter_set", "exporter_list", "status"}, names)
+		"exporter_set", "exporter_list", "status", "source_preview", "source_save", "source_list", "source_remove",
+		"observe_sync", "observe_records", "observe_status"}, names)
 }
 
 func TestRegisterFlow(t *testing.T) {
