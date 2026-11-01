@@ -1,0 +1,74 @@
+[
+  {
+    "name": "unicode_integer_and_absent_optional",
+    "generator": "Python json and hashlib",
+    "event": {
+      "source_instance": "acme",
+      "generation": "g1",
+      "stream": "actions",
+      "id": "e1",
+      "type": "acme.action",
+      "schema_version": "v1",
+      "adapter_revision": "v1",
+      "projection_profile": "metadata",
+      "occurred_at": "2026-01-01T09:00:00+09:00",
+      "links": [],
+      "attributes": {
+        "Z": true,
+        "text": "<>&  雪/\b\f\n\r\t\u0001\"\\",
+        "A": -9007199254740991
+      },
+      "evidence": []
+    },
+    "canonical": "[\"rindcut.projection/v1\",\"acme\",\"g1\",\"actions\",\"e1\",\"acme.action\",\"v1\",null,\"v1\",\"metadata\",\"2026-01-01T00:00:00.000000000Z\",null,null,[],[[\"A\",-9007199254740991],[\"Z\",true],[\"text\",\"\\u003c\\u003e\\u0026\\u2028\\u2029雪/\\b\\f\\n\\r\\t\\u0001\\\"\\\\\"]],[]]",
+    "digest": "sha256:c8ff6e6a892826ac9b07c285ce6552c6e5ff31c9def7118a58b02359a0e72ea8"
+  },
+  {
+    "event": {
+      "source_instance": "acme",
+      "generation": "g1",
+      "stream": "actions",
+      "id": "e1",
+      "type": "acme.action",
+      "schema_version": "v1",
+      "producer_version": "p1",
+      "adapter_revision": "a1",
+      "projection_profile": "metadata",
+      "occurred_at": "2026-01-01T00:00:00Z",
+      "action_id": "A1",
+      "attempt_id": "try1",
+      "links": [
+        {
+          "relation": "retry_of",
+          "target": {
+            "source_id": "other",
+            "source_instance": "acme2",
+            "generation": "g0",
+            "stream": "old",
+            "type": "acme.previous",
+            "id": "e0",
+            "projection_profile": "old-meta"
+          }
+        }
+      ],
+      "attributes": {
+        "Z": true,
+        "A": 9007199254740991
+      },
+      "evidence": [
+        {
+          "kind": "receipt",
+          "ref": {
+            "namespace": "acme",
+            "id": "receipt1"
+          },
+          "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+        }
+      ]
+    },
+    "canonical": "[\"rindcut.projection/v1\",\"acme\",\"g1\",\"actions\",\"e1\",\"acme.action\",\"v1\",\"p1\",\"a1\",\"metadata\",\"2026-01-01T00:00:00.000000000Z\",\"A1\",\"try1\",[[\"retry_of\",[\"other\",\"acme2\",\"g0\",\"old\",\"acme.previous\",\"e0\",\"old-meta\"]]],[[\"A\",9007199254740991],[\"Z\",true]],[[\"receipt\",\"acme\",\"receipt1\",\"sha256:1111111111111111111111111111111111111111111111111111111111111111\"]]]",
+    "digest": "sha256:b9b9e6c1c8390c6dd09cc5d13033e2e20c86844e37c0782f50615256db31fdc8",
+    "name": "all_optional_fields_links_and_evidence",
+    "generator": "Python json and hashlib"
+  }
+]
