@@ -13,9 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jeon-jihyeon/rindcut/internal/app"
-	"github.com/jeon-jihyeon/rindcut/internal/home"
-	"github.com/jeon-jihyeon/rindcut/internal/judge"
+	"github.com/jeon-jihyeon/rindcut/app"
 	"github.com/jeon-jihyeon/rindcut/internal/ledger"
 	"github.com/jeon-jihyeon/rindcut/internal/mcp"
 )
@@ -32,8 +30,8 @@ func start(t *testing.T) *harness {
 	now := time.Date(2026, 10, 8, 9, 10, 0, 0, time.UTC)
 	userHome := t.TempDir()
 	a := app.App{
-		Home: home.Dir(t.TempDir()), UserHome: userHome, Now: func() time.Time { return now }, Version: "test", Warn: os.Stderr,
-		Installer: judge.Installer{Binary: "/bin/rindcut", Home: "/h", UserHome: userHome, GOOS: "darwin", UID: 501,
+		Home: t.TempDir(), UserHome: userHome, Now: func() time.Time { return now }, Version: "test", Warn: os.Stderr,
+		Installer: app.Scheduler{Binary: "/bin/rindcut", Home: "/h", UserHome: userHome, GOOS: "darwin", UID: 501,
 			Exec: func(string, ...string) error { return nil }},
 	}
 	require.NoError(t, a.Ready())
@@ -218,7 +216,7 @@ func TestCorrectAndExporters(t *testing.T) {
 func TestStructuredCorrection(t *testing.T) {
 	t.Parallel()
 	h := start(t)
-	entry, err := h.app.Ledger().Append(context.Background(), ledger.KindVerdict,
+	entry, err := ledger.Open(filepath.Join(h.app.Home, "ledger.jsonl"), filepath.Join(h.app.Home, "ledger.lock"), h.app.Now, h.app.Version, func(int, error) {}).Append(context.Background(), ledger.KindVerdict,
 		ledger.Judgment{JobID: "report", Verdict: ledger.VerdictFail})
 	require.NoError(t, err)
 	res, err := h.sess.CallTool(context.Background(), &sdk.CallToolParams{Name: "correct",

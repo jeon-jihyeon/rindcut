@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/jeon-jihyeon/rindcut/internal/ledger"
+	"github.com/jeon-jihyeon/rindcut/app"
 )
 
 // The SessionEnd hook input, only the fields a session record needs
@@ -32,7 +32,7 @@ func runHook(args []string, e env) error {
 	if err != nil {
 		return err
 	}
-	_, err = a.RecordSession(context.Background(), ledger.Session{
+	_, err = a.RecordSession(context.Background(), app.Session{
 		SessionID: in.SessionID, TranscriptPath: in.TranscriptPath, Cwd: in.Cwd, EndReason: in.Reason,
 		RunID: in.RunID,
 	})

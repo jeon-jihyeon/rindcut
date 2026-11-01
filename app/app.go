@@ -1,4 +1,4 @@
-// Package app wires job, judge, ledger and export into the use cases the CLI and the MCP tools share
+// Package app provides the use cases shared by the CLI and MCP tools
 package app
 
 import (
@@ -22,9 +22,8 @@ import (
 )
 
 const (
-	// A preview must be this fresh for a save, so the owner saves what they just saw checked
-	previewTTL = 30 * time.Minute
-	// The scheduler runs the tick this often
+	// Only a recently checked definition may be saved
+	previewTTL   = 30 * time.Minute
 	tickInterval = 5 * time.Minute
 )
 
@@ -34,33 +33,33 @@ var (
 )
 
 type App struct {
-	Home     home.Dir
+	Home     string
 	UserHome string
 	Now      func() time.Time
 	Version  string
-	// Installer keeps the tick scheduled, installed on the first saved job
-	Installer judge.Installer
-	// Warn receives ledger lines that couldn't be read, so damage is reported and never dropped in silence
+	// Schedule installation starts with the first saved job
+	Installer Scheduler
+	// Unreadable ledger lines remain visible to the owner
 	Warn io.Writer
 	// SearchPath is the PATH to find nodloop in
 	SearchPath string
 }
 
-func (a App) Ledger() *ledger.Ledger {
-	return ledger.Open(a.Home.Ledger(), a.Home.Lock("ledger"), a.Now, a.Version, func(line int, err error) {
+func (a App) ledger() *ledger.Ledger {
+	return ledger.Open(a.homePath("ledger.jsonl"), a.lockPath("ledger"), a.Now, a.Version, func(line int, err error) {
 		fmt.Fprintf(a.Warn, "rindcut: skipped ledger line %d: %v\n", line, err)
 	})
 }
 
-func (a App) Judge() judge.Judge {
-	return judge.Judge{Ledger: a.Ledger(), Now: a.Now, UserHome: a.UserHome, Dir: string(a.Home)}
+func (a App) judge() judge.Judge {
+	return judge.Judge{Ledger: a.ledger(), Now: a.Now, UserHome: a.UserHome, Dir: string(a.Home)}
 }
 
-func (a App) settingsPath() string { return a.Home.Path("exporters.json") }
-func (a App) cursorDir() string    { return a.Home.Path("cursors") }
+func (a App) settingsPath() string { return a.homePath("exporters.json") }
+func (a App) cursorDir() string    { return a.homePath("cursors") }
 
 // Revisions reads every job revision with the time it was recorded
-func Revisions(entries []ledger.Entry) []job.Job {
+func revisions(entries []ledger.Entry) []job.Job {
 	var out []job.Job
 	for _, e := range entries {
 		var j job.Job
@@ -73,16 +72,16 @@ func Revisions(entries []ledger.Entry) []job.Job {
 }
 
 // Names maps every job id ever recorded to its latest name
-func Names(entries []ledger.Entry) map[string]string {
+func names(entries []ledger.Entry) map[string]string {
 	out := map[string]string{}
-	for id, j := range job.Current(Revisions(entries)) {
+	for id, j := range job.Current(revisions(entries)) {
 		out[id] = j.Name
 	}
 	return out
 }
 
-// Fingerprint identifies a job definition apart from its revision number, for matching a save to its preview
-func Fingerprint(j job.Job) string {
+// Revision numbers do not change the preview identity
+func fingerprint(j job.Job) string {
 	j.Revision, j.Since = 0, time.Time{}
 	b, _ := json.Marshal(j)
 	sum := sha256.Sum256(b)
@@ -90,31 +89,31 @@ func Fingerprint(j job.Job) string {
 }
 
 type Preview struct {
-	Job       job.Job         `json:"job"`
-	NextSlots []time.Time     `json:"next_slots"`
-	Probe     ledger.Judgment `json:"probe"`
-	ProbeID   string          `json:"probe_id"`
-	// Warnings names each check that looks at nothing tied to the slot, so it can't prove any one run
+	Job       Job         `json:"job"`
+	NextSlots []time.Time `json:"next_slots"`
+	Probe     Judgment    `json:"probe"`
+	ProbeID   string      `json:"probe_id"`
+	// Checks without slot evidence cannot establish the result of one run
 	Warnings []string `json:"warnings"`
 }
 
-// Preview validates a job, lists its next slots and judges its latest slot without counting it
-func (a App) Preview(ctx context.Context, j job.Job) (Preview, error) {
-	entries, err := a.Ledger().All(ctx)
+// A job preview must not count as a slot verdict
+func (a App) Preview(ctx context.Context, in Job) (Preview, error) {
+	entries, err := a.ledger().All(ctx)
 	if err != nil {
 		return Preview{}, err
 	}
-	j = nextRevision(entries, j)
+	j := nextRevision(entries, in.model())
 	if err := j.Validate(); err != nil {
 		return Preview{}, err
 	}
-	j = a.Judge().Pin(j)
+	j = a.judge().Pin(j)
 	now := a.Now()
 	slots, err := j.Slots(now, now.AddDate(0, 2, 0))
 	if err != nil {
 		return Preview{}, err
 	}
-	p := Preview{Job: j, NextSlots: []time.Time{}, Warnings: []string{}}
+	p := Preview{Job: jobView(j), NextSlots: []time.Time{}, Warnings: []string{}}
 	for _, s := range slots[:min(3, len(slots))] {
 		p.NextSlots = append(p.NextSlots, s.At)
 	}
@@ -123,45 +122,50 @@ func (a App) Preview(ctx context.Context, j job.Job) (Preview, error) {
 			p.Warnings = append(p.Warnings, fmt.Sprintf("check %d, %s, looks at nothing tied to the slot, so it gives the same answer every run", i+1, c.Kind))
 		}
 	}
-	e, err := a.Judge().Probe(ctx, j, now, Fingerprint(j))
+	e, err := a.judge().Probe(ctx, j, now, fingerprint(j))
 	if err != nil {
 		return Preview{}, err
 	}
 	p.ProbeID = e.ID
-	return p, e.Decode(&p.Probe)
+	var probe ledger.Judgment
+	if err := e.Decode(&probe); err != nil {
+		return Preview{}, err
+	}
+	p.Probe = judgmentView(probe)
+	return p, nil
 }
 
 type Saved struct {
-	Job job.Job `json:"job"`
+	Job Job `json:"job"`
 	// Installed is true when this save also scheduled the tick
 	Installed bool `json:"installed"`
 }
 
 // Save records a job revision the owner previewed and keeps the tick scheduled
-func (a App) Save(ctx context.Context, j job.Job) (Saved, error) {
-	unlock, err := lock.Acquire(ctx, a.Home.Lock("jobs"), time.Second)
+func (a App) Save(ctx context.Context, in Job) (Saved, error) {
+	unlock, err := lock.Acquire(ctx, a.lockPath("jobs"), time.Second)
 	if err != nil {
 		return Saved{}, fmt.Errorf("job definition busy or unavailable, try save again: %w", err)
 	}
 	defer unlock()
-	entries, err := a.Ledger().All(ctx)
+	entries, err := a.ledger().All(ctx)
 	if err != nil {
 		return Saved{}, err
 	}
-	j = nextRevision(entries, j)
+	j := nextRevision(entries, in.model())
 	if err := j.Validate(); err != nil {
 		return Saved{}, err
 	}
-	j = a.Judge().Pin(j)
-	if !previewed(entries, Fingerprint(j), a.Now()) {
+	j = a.judge().Pin(j)
+	if !previewed(entries, fingerprint(j), a.Now()) {
 		return Saved{}, ErrNoPreview
 	}
-	if _, err := a.Ledger().Append(ctx, ledger.KindJob, j); err != nil {
+	if _, err := a.ledger().Append(ctx, ledger.KindJob, j); err != nil {
 		return Saved{}, err
 	}
-	out := Saved{Job: j}
-	if !a.Installer.Installed() {
-		if err := a.Installer.Install(); err != nil {
+	out := Saved{Job: jobView(j)}
+	if !a.scheduler().Installed() {
+		if err := a.scheduler().Install(); err != nil {
 			return out, fmt.Errorf("job saved, but the tick couldn't be scheduled, the next save tries again: %w", err)
 		}
 		out.Installed = true
@@ -169,14 +173,14 @@ func (a App) Save(ctx context.Context, j job.Job) (Saved, error) {
 	return out, nil
 }
 
-// nextRevision numbers a job after the one recorded under its id, naming it from its name when it has no id
-// The caller's revision number is ignored, so two saves can't claim the same revision
+// The recorded revision takes precedence over the number supplied by the caller
+// Two saves cannot claim the same revision
 func nextRevision(entries []ledger.Entry, j job.Job) job.Job {
 	if j.ID == "" {
 		j.ID = job.Slug(j.Name)
 	}
 	j.Revision, j.Removed = 1, false
-	if cur, ok := job.Current(Revisions(entries))[j.ID]; ok {
+	if cur, ok := job.Current(revisions(entries))[j.ID]; ok {
 		j.Revision = cur.Revision + 1
 	}
 	return j
@@ -193,35 +197,35 @@ func previewed(entries []ledger.Entry, fingerprint string, now time.Time) bool {
 	return false
 }
 
-// Remove writes a removing revision, keeping the job's history
-func (a App) Remove(ctx context.Context, id string) (job.Job, error) {
-	unlock, err := lock.Acquire(ctx, a.Home.Lock("jobs"), time.Second)
+// Removing a job preserves its recorded history
+func (a App) Remove(ctx context.Context, id string) (Job, error) {
+	unlock, err := lock.Acquire(ctx, a.lockPath("jobs"), time.Second)
 	if err != nil {
-		return job.Job{}, fmt.Errorf("job definition busy or unavailable, try remove again: %w", err)
+		return Job{}, fmt.Errorf("job definition busy or unavailable, try remove again: %w", err)
 	}
 	defer unlock()
-	entries, err := a.Ledger().All(ctx)
+	entries, err := a.ledger().All(ctx)
 	if err != nil {
-		return job.Job{}, err
+		return Job{}, err
 	}
-	cur, ok := job.Current(Revisions(entries))[id]
+	cur, ok := job.Current(revisions(entries))[id]
 	if !ok || cur.Removed {
-		return job.Job{}, fmt.Errorf("%s: %w", id, ErrNoJob)
+		return Job{}, fmt.Errorf("%s: %w", id, ErrNoJob)
 	}
 	cur.Revision++
 	cur.Removed = true
-	_, err = a.Ledger().Append(ctx, ledger.KindJob, cur)
-	return cur, err
+	_, err = a.ledger().Append(ctx, ledger.KindJob, cur)
+	return jobView(cur), err
 }
 
 type JobView struct {
-	job.Job
-	LastVerdict *ledger.Judgment `json:"last_verdict,omitempty"`
-	NextSlot    *time.Time       `json:"next_slot,omitempty"`
+	Job
+	LastVerdict *Judgment  `json:"last_verdict,omitempty"`
+	NextSlot    *time.Time `json:"next_slot,omitempty"`
 }
 
 func (a App) Jobs(ctx context.Context, all bool) ([]JobView, error) {
-	entries, err := a.Ledger().All(ctx)
+	entries, err := a.ledger().All(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -234,13 +238,14 @@ func (a App) Jobs(ctx context.Context, all bool) ([]JobView, error) {
 	}
 	now := a.Now()
 	out := []JobView{}
-	for _, j := range job.Current(Revisions(entries)) {
+	for _, j := range job.Current(revisions(entries)) {
 		if j.Removed && !all {
 			continue
 		}
-		v := JobView{Job: j}
+		v := JobView{Job: jobView(j)}
 		if lv, ok := last[j.ID]; ok {
-			v.LastVerdict = &lv
+			view := judgmentView(lv)
+			v.LastVerdict = &view
 		}
 		if slots, err := j.Slots(now, now.AddDate(0, 2, 0)); err == nil && len(slots) > 0 && !j.Removed {
 			v.NextSlot = &slots[0].At
@@ -253,15 +258,16 @@ func (a App) Jobs(ctx context.Context, all bool) ([]JobView, error) {
 
 type TickResult struct {
 	// Busy means another tick held the lock and this one did nothing
-	Busy bool `json:"busy"`
-	judge.TickResult
-	Lag []export.Lag `json:"lag"`
+	Busy       bool    `json:"busy"`
+	Verdicts   []Entry `json:"verdicts"`
+	Backfilled int     `json:"backfilled"`
+	Lag        []Lag   `json:"lag"`
 }
 
-// Tick judges closed slots, then sends everything new to the exporters
-// The lock spans both, so a slow export can't overlap the next tick's export and resend or rewind a cursor
+// The tick lock spans slot judgments and verdict export
+// A slow export cannot overlap the next tick and resend or rewind its cursor
 func (a App) Tick(ctx context.Context) (TickResult, error) {
-	unlock, err := lock.Acquire(ctx, a.Home.Lock("tick"), 0)
+	unlock, err := lock.Acquire(ctx, a.lockPath("tick"), 0)
 	if errors.Is(err, lock.ErrBusy) {
 		return TickResult{Busy: true}, nil
 	}
@@ -269,25 +275,25 @@ func (a App) Tick(ctx context.Context) (TickResult, error) {
 		return TickResult{}, err
 	}
 	defer unlock()
-	r, err := a.Judge().Tick(ctx)
+	r, err := a.judge().Tick(ctx)
 	if err != nil {
 		return TickResult{}, err
 	}
-	// Status reads this to tell a running tick from a stopped one, even on days with no slot
-	_ = os.WriteFile(a.Home.Path("last-tick"), []byte(a.Now().UTC().Format(time.RFC3339)), 0o600)
+	// Status must distinguish a quiet tick from a stopped one
+	_ = os.WriteFile(a.homePath("last-tick"), []byte(a.Now().UTC().Format(time.RFC3339)), 0o600)
 	lags, err := a.export(ctx, "")
-	return TickResult{TickResult: r, Lag: lags}, err
+	return TickResult{Verdicts: entriesView(r.Verdicts), Backfilled: r.Backfilled, Lag: lagViews(lags)}, err
 }
 
-// Export runs the exporters, one when name is set, and resends everything with fromStart
-func (a App) Export(ctx context.Context, name string, fromStart bool) ([]export.Lag, error) {
-	unlock, err := lock.Acquire(ctx, a.Home.Lock("tick"), tickInterval)
+// Export retries eligible scheduled records under the tick lock
+func (a App) Export(ctx context.Context, name string, fromStart bool) ([]Lag, error) {
+	unlock, err := lock.Acquire(ctx, a.lockPath("tick"), tickInterval)
 	if err != nil {
 		return nil, err
 	}
 	defer unlock()
 	if fromStart {
-		s, err := a.Settings()
+		s, err := a.settings()
 		if err != nil {
 			return nil, err
 		}
@@ -300,20 +306,21 @@ func (a App) Export(ctx context.Context, name string, fromStart bool) ([]export.
 			}
 		}
 	}
-	return a.export(ctx, name)
+	lags, err := a.export(ctx, name)
+	return lagViews(lags), err
 }
 
 // export runs under the tick lock
 func (a App) export(ctx context.Context, name string) ([]export.Lag, error) {
-	entries, err := a.Ledger().All(ctx)
+	entries, err := a.ledger().All(ctx)
 	if err != nil {
 		return nil, err
 	}
-	s, err := a.Settings()
+	s, err := a.settings()
 	if err != nil {
 		return nil, err
 	}
-	all, err := s.Build(ctx, entries, Names(entries), a.Version, a.UserHome, a.SearchPath, a.cursorDir())
+	all, err := s.Build(ctx, entries, names(entries), a.Version, a.UserHome, a.SearchPath, a.cursorDir())
 	if err != nil {
 		return nil, err
 	}
@@ -328,7 +335,7 @@ func (a App) export(ctx context.Context, name string) ([]export.Lag, error) {
 	return lags, nil
 }
 
-// shutdown releases what an exporter holds, like the OTLP HTTP client, since the MCP server outlives each call
+// The MCP server outlives each call and must not retain idle exporter clients
 func shutdown(ctx context.Context, exporters []export.Exporter) {
 	for _, ex := range exporters {
 		if c, ok := ex.(interface{ Shutdown(context.Context) error }); ok {
@@ -339,7 +346,7 @@ func shutdown(ctx context.Context, exporters []export.Exporter) {
 
 // Ready creates the home before anything writes into it
 func (a App) Ready() error {
-	if err := a.Home.Ensure(); err != nil {
+	if err := home.Dir(a.Home).Ensure(); err != nil {
 		return fmt.Errorf("can't create %s: %w", a.Home, err)
 	}
 	return nil

@@ -1,4 +1,4 @@
-// Command rindcut checks that scheduled AI agent jobs really ran and really produced what they promised
+// Command rindcut checks scheduled job outputs
 package main
 
 import (
@@ -8,14 +8,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
 	"time"
 
-	"github.com/jeon-jihyeon/rindcut/internal/app"
-	"github.com/jeon-jihyeon/rindcut/internal/home"
-	"github.com/jeon-jihyeon/rindcut/internal/judge"
+	"github.com/jeon-jihyeon/rindcut/app"
 	"github.com/jeon-jihyeon/rindcut/internal/output"
 )
 
@@ -99,39 +94,9 @@ func run(args []string, e env) int {
 }
 
 func newApp(e env) (app.App, error) {
-	h, err := home.Resolve(e.getenv)
+	a, err := app.New(e.getenv, e.now, version, e.stderr)
 	if err != nil {
 		return app.App{}, err
 	}
-	userHome := e.getenv("HOME")
-	a := app.App{
-		Home: h, UserHome: userHome, Now: e.now, Version: version, Warn: e.stderr, SearchPath: e.getenv("PATH"),
-		Installer: judge.Installer{
-			Binary: stableBinary(h), Home: string(h), UserHome: userHome, GOOS: runtime.GOOS, UID: os.Getuid(),
-			Exec: func(name string, args ...string) error {
-				out, err := exec.Command(name, args...).CombinedOutput()
-				if err != nil {
-					return fmt.Errorf("%s: %w: %s", name, err, out)
-				}
-				return nil
-			},
-		},
-	}
 	return a, a.Ready()
-}
-
-// The scheduler calls the path the plugin launcher keeps pointed at the current binary
-// Without the plugin, it's this binary
-func stableBinary(h home.Dir) string {
-	stable := h.Path("bin", "rindcut")
-	if _, err := os.Stat(stable); err == nil {
-		return stable
-	}
-	if exe, err := os.Executable(); err == nil {
-		if abs, err := filepath.EvalSymlinks(exe); err == nil {
-			return abs
-		}
-		return exe
-	}
-	return stable
 }

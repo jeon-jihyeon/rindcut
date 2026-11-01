@@ -13,9 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jeon-jihyeon/rindcut/internal/app"
-	"github.com/jeon-jihyeon/rindcut/internal/check"
-	"github.com/jeon-jihyeon/rindcut/internal/job"
+	"github.com/jeon-jihyeon/rindcut/app"
 	"github.com/jeon-jihyeon/rindcut/internal/ledger"
 	"github.com/jeon-jihyeon/rindcut/internal/lock"
 )
@@ -24,14 +22,14 @@ const appCriticResponse = `{"protocol":"rindcut.critic/v1","job_id":"report","jo
 	`"slot":"2026-10-08T09:00:00Z",` +
 	`"criteria_revision":"C1","complete":true,"criteria":[{"id":"accuracy","verdict":"rejected"}]}`
 
-func withCritic(t *testing.T, w world) job.Job {
+func withCritic(t *testing.T, w world) app.Job {
 	t.Helper()
 	j := w.job()
-	j.Name, j.Evidence, j.Marker = "Report", job.EvidenceNone, ""
-	j.Checks = []check.Spec{{Kind: check.KindCommand, Run: "true"}}
-	j.Critic = &job.Critic{Source: "acme", SourceRevision: "adapter-v1", CriteriaRevision: "C1",
-		Criteria: []job.Criterion{{ID: "accuracy", Text: "Numbers have sources"}},
-		Command:  check.Spec{Kind: check.KindCommand, Run: "sh critic.sh"}}
+	j.Name, j.Evidence, j.Marker = "Report", "none", ""
+	j.Checks = []app.CheckSpec{{Kind: "command", Run: "true"}}
+	j.Critic = &app.Critic{Source: "acme", SourceRevision: "adapter-v1", CriteriaRevision: "C1",
+		Criteria: []app.Criterion{{ID: "accuracy", Text: "Numbers have sources"}},
+		Command:  app.CheckSpec{Kind: "command", Run: "sh critic.sh"}}
 	require.NoError(t, os.WriteFile(filepath.Join(w.folder, "response.json"), []byte(appCriticResponse), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(w.folder, "critic.sh"),
 		[]byte("cat > input.json\nprintf x >> calls\ncat response.json\n"), 0o700))
@@ -41,7 +39,7 @@ func withCritic(t *testing.T, w world) job.Job {
 func TestCriticChangesRequirePreview(t *testing.T) {
 	t.Parallel()
 	type args struct {
-		edit    func(*job.Critic)
+		edit    func(*app.Critic)
 		script  bool
 		preview bool
 	}
@@ -51,14 +49,14 @@ func TestCriticChangesRequirePreview(t *testing.T) {
 		want error
 	}{
 		{name: "same definition"},
-		{name: "source", args: args{edit: func(c *job.Critic) { c.Source = "other" }}, want: app.ErrNoPreview},
-		{name: "source revision", args: args{edit: func(c *job.Critic) { c.SourceRevision = "adapter-v2" }},
+		{name: "source", args: args{edit: func(c *app.Critic) { c.Source = "other" }}, want: app.ErrNoPreview},
+		{name: "source revision", args: args{edit: func(c *app.Critic) { c.SourceRevision = "adapter-v2" }},
 			want: app.ErrNoPreview},
-		{name: "criteria revision", args: args{edit: func(c *job.Critic) { c.CriteriaRevision = "C2" }},
+		{name: "criteria revision", args: args{edit: func(c *app.Critic) { c.CriteriaRevision = "C2" }},
 			want: app.ErrNoPreview},
-		{name: "criterion text", args: args{edit: func(c *job.Critic) { c.Criteria[0].Text = "Sources are current" }},
+		{name: "criterion text", args: args{edit: func(c *app.Critic) { c.Criteria[0].Text = "Sources are current" }},
 			want: app.ErrNoPreview},
-		{name: "reason retention", args: args{edit: func(c *job.Critic) { c.RetainReason = true }}, want: app.ErrNoPreview},
+		{name: "reason retention", args: args{edit: func(c *app.Critic) { c.RetainReason = true }}, want: app.ErrNoPreview},
 		{name: "edited adapter", args: args{script: true}, want: app.ErrNoPreview},
 		{name: "edited adapter previewed again", args: args{script: true, preview: true}},
 	}
@@ -110,19 +108,18 @@ func TestCriticRevisionAndReport(t *testing.T) {
 	assert.Equal(t, 1, report.Totals.Pass)
 	assert.Empty(t, report.Problems)
 	require.Len(t, report.CriticProblems, 1)
-	assert.Equal(t, ledger.CriticRejected, report.CriticProblems[0].Critic.Verdict)
-	_, err = w.a.Correct(ctx, ledger.Correction{VerdictID: out.Verdicts[0].ID,
-		Verdict: ledger.VerdictFail, Reason: "Owner correction", By: "ann"})
+	assert.Equal(t, "rejected", report.CriticProblems[0].Critic.Verdict)
+	_, err = w.a.Correct(ctx, app.Correction{VerdictID: out.Verdicts[0].ID,
+		Verdict: "fail", Reason: "Owner correction", By: "ann"})
 	require.NoError(t, err)
 	report, err = w.a.Report(ctx, 24*time.Hour)
 	require.NoError(t, err)
 	assert.Equal(t, 1, report.Totals.Fail)
 	require.Len(t, report.CriticProblems, 1)
-	assert.Equal(t, ledger.CriticRejected, report.CriticProblems[0].Critic.Verdict)
-	probe, err := w.a.Judge().Probe(ctx, j, *w.now, app.Fingerprint(j))
+	assert.Equal(t, "rejected", report.CriticProblems[0].Critic.Verdict)
+	probe, err := w.a.Check(ctx, j.ID, *w.now)
 	require.NoError(t, err)
-	var current ledger.Judgment
-	require.NoError(t, probe.Decode(&current))
+	current := probe
 	require.NotNil(t, current.Critic)
 	assert.Equal(t, 2, current.JobRevision)
 	assert.Equal(t, "C2", current.Critic.CriteriaRevision)
@@ -143,9 +140,9 @@ func TestCriticTickConcurrency(t *testing.T) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	j.Checks = []check.Spec{{Kind: check.KindHTTP, URL: srv.URL}}
+	j.Checks = []app.CheckSpec{{Kind: "http", URL: srv.URL}}
 	*w.now = time.Date(2026, 10, 8, 8, 50, 0, 0, time.UTC)
-	_, err := w.a.Ledger().Append(context.Background(), ledger.KindJob, j)
+	_, err := openLedger(w.a).Append(context.Background(), ledger.KindJob, j)
 	require.NoError(t, err)
 	*w.now = time.Date(2026, 10, 8, 9, 31, 0, 0, time.UTC)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -227,7 +224,7 @@ func TestCriticSaveDefinitionLockFailure(t *testing.T) {
 			t.Parallel()
 			w := newWorld(t)
 			j := w.saved(t, withCritic(t, w))
-			unlock, err := lock.Acquire(context.Background(), w.a.Home.Lock("jobs"), 0)
+			unlock, err := lock.Acquire(context.Background(), filepath.Join(w.a.Home, "jobs.lock"), 0)
 			require.NoError(t, err)
 			defer unlock()
 			ctx, cancel := context.WithCancel(context.Background())
@@ -247,7 +244,7 @@ func TestCriticRemoveDefinitionLockFailure(t *testing.T) {
 			t.Parallel()
 			w := newWorld(t)
 			j := w.saved(t, withCritic(t, w))
-			unlock, err := lock.Acquire(context.Background(), w.a.Home.Lock("jobs"), 0)
+			unlock, err := lock.Acquire(context.Background(), filepath.Join(w.a.Home, "jobs.lock"), 0)
 			require.NoError(t, err)
 			defer unlock()
 			ctx, cancel := context.WithCancel(context.Background())

@@ -17,9 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jeon-jihyeon/rindcut/internal/app"
-	"github.com/jeon-jihyeon/rindcut/internal/check"
-	"github.com/jeon-jihyeon/rindcut/internal/home"
+	"github.com/jeon-jihyeon/rindcut/app"
 	"github.com/jeon-jihyeon/rindcut/internal/job"
 	"github.com/jeon-jihyeon/rindcut/internal/judge"
 	"github.com/jeon-jihyeon/rindcut/internal/ledger"
@@ -42,8 +40,8 @@ func newWorld(t *testing.T) world {
 	w := world{now: &now, folder: t.TempDir(), warn: &bytes.Buffer{}, refuse: &refuse}
 	userHome := t.TempDir()
 	w.a = app.App{
-		Home: home.Dir(t.TempDir()), UserHome: userHome, Now: func() time.Time { return *w.now }, Version: "test", Warn: w.warn,
-		Installer: judge.Installer{Binary: "/bin/rindcut", Home: "/h", UserHome: userHome, GOOS: "darwin", UID: 501,
+		Home: t.TempDir(), UserHome: userHome, Now: func() time.Time { return *w.now }, Version: "test", Warn: w.warn,
+		Installer: app.Scheduler{Binary: "/bin/rindcut", Home: "/h", UserHome: userHome, GOOS: "darwin", UID: 501,
 			Exec: func(name string, args ...string) error {
 				if *w.refuse && len(args) > 0 && args[0] == "bootstrap" {
 					return errors.New("refused")
@@ -55,15 +53,15 @@ func newWorld(t *testing.T) world {
 	return w
 }
 
-func (w world) job() job.Job {
-	return job.Job{
-		Name: "가격 수집", Schedule: "0 9 * * *", Timezone: "UTC", Grace: check.Duration(30 * time.Minute),
-		Evidence: job.EvidenceSession, Folder: w.folder, Marker: "오늘 가격 수집해줘",
-		Checks: []check.Spec{{Kind: check.KindFile, Path: "out/{{date}}.csv"}},
+func (w world) job() app.Job {
+	return app.Job{
+		Name: "가격 수집", Schedule: "0 9 * * *", Timezone: "UTC", Grace: app.Duration(30 * time.Minute),
+		Evidence: "session", Folder: w.folder, Marker: "오늘 가격 수집해줘",
+		Checks: []app.CheckSpec{{Kind: "file", Path: "out/{{date}}.csv"}},
 	}
 }
 
-func (w world) saved(t *testing.T, j job.Job) job.Job {
+func (w world) saved(t *testing.T, j app.Job) app.Job {
 	t.Helper()
 	ctx := context.Background()
 	_, err := w.a.Preview(ctx, j)
@@ -83,32 +81,32 @@ func TestSaveNeedsAFreshPreviewOfTheSameJob(t *testing.T) {
 	tcs := []struct {
 		name string
 		// prepare previews or saves first and returns the job to save
-		prepare func(t *testing.T, w world) job.Job
+		prepare func(t *testing.T, w world) app.Job
 		want    want
 	}{
-		{name: "no preview", prepare: func(_ *testing.T, w world) job.Job { return w.job() }, want: want{}},
-		{name: "previewed", prepare: func(t *testing.T, w world) job.Job {
+		{name: "no preview", prepare: func(_ *testing.T, w world) app.Job { return w.job() }, want: want{}},
+		{name: "previewed", prepare: func(t *testing.T, w world) app.Job {
 			_, err := w.a.Preview(context.Background(), w.job())
 			require.NoError(t, err)
 			return w.job()
 		}, want: want{saved: true, revision: 1, installed: true}},
-		{name: "preview too old", prepare: func(t *testing.T, w world) job.Job {
+		{name: "preview too old", prepare: func(t *testing.T, w world) app.Job {
 			_, err := w.a.Preview(context.Background(), w.job())
 			require.NoError(t, err)
 			*w.now = w.now.Add(31 * time.Minute)
 			return w.job()
 		}, want: want{}},
-		{name: "changed after the preview", prepare: func(t *testing.T, w world) job.Job {
+		{name: "changed after the preview", prepare: func(t *testing.T, w world) app.Job {
 			_, err := w.a.Preview(context.Background(), w.job())
 			require.NoError(t, err)
 			j := w.job()
-			j.Grace = check.Duration(time.Hour)
+			j.Grace = app.Duration(time.Hour)
 			return j
 		}, want: want{}},
-		{name: "second revision, tick already scheduled", prepare: func(t *testing.T, w world) job.Job {
+		{name: "second revision, tick already scheduled", prepare: func(t *testing.T, w world) app.Job {
 			first := w.saved(t, w.job())
 			j := w.job()
-			j.ID, j.Grace = first.ID, check.Duration(time.Hour)
+			j.ID, j.Grace = first.ID, app.Duration(time.Hour)
 			_, err := w.a.Preview(context.Background(), j)
 			require.NoError(t, err)
 			return j
@@ -137,7 +135,7 @@ func TestSaveRetriesARefusedSchedule(t *testing.T) {
 	_, err = w.a.Save(ctx, w.job())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "job saved")
-	assert.False(t, w.a.Installer.Installed())
+	assert.False(t, judge.Installer(w.a.Installer).Installed())
 
 	*w.refuse = false
 	j := w.job()
@@ -178,7 +176,7 @@ func TestRemoveAndJobs(t *testing.T) {
 
 func (w world) verdict(t *testing.T, jobID string, slot time.Time, v ledger.Verdict) ledger.Entry {
 	t.Helper()
-	e, err := w.a.Ledger().Append(context.Background(), ledger.KindVerdict, ledger.Judgment{
+	e, err := openLedger(w.a).Append(context.Background(), ledger.KindVerdict, ledger.Judgment{
 		JobID: jobID, SlotKey: jobID + "@" + slot.Format(time.RFC3339), Slot: slot, Verdict: v, Trigger: judge.TriggerTick,
 		Checks: []ledger.CheckRecord{{Kind: "file", Status: string(v), Message: string(v) + " check"}},
 	})
@@ -190,7 +188,7 @@ func TestReport(t *testing.T) {
 	t.Parallel()
 	tcs := []struct {
 		name string
-		// at is when the report runs, the job's 09:00 slot closes at 09:30
+		// The report runs after the 09:00 slot closes at 09:30
 		at       time.Time
 		verdict  bool
 		settings string
@@ -210,10 +208,10 @@ func TestReport(t *testing.T) {
 			w := newWorld(t)
 			saved := w.saved(t, w.job())
 			if tc.verdict {
-				w.verdict(t, saved.ID, time.Date(2026, 10, 9, 9, 0, 0, 0, time.UTC), ledger.VerdictPass)
+				w.verdict(t, saved.ID, time.Date(2026, 10, 9, 9, 0, 0, 0, time.UTC), "pass")
 			}
 			if tc.settings != "" {
-				require.NoError(t, os.WriteFile(w.a.Home.Path("exporters.json"), []byte(tc.settings), 0o600))
+				require.NoError(t, os.WriteFile(filepath.Join(w.a.Home, "exporters.json"), []byte(tc.settings), 0o600))
 			}
 			*w.now = tc.at
 			r, err := w.a.Report(context.Background(), 24*time.Hour)
@@ -233,16 +231,16 @@ func TestVerdictsAndCorrect(t *testing.T) {
 	w := newWorld(t)
 	ctx := context.Background()
 	day := func(d int) time.Time { return time.Date(2026, 10, d, 9, 0, 0, 0, time.UTC) }
-	w.verdict(t, "a", day(5), ledger.VerdictPass)
-	wrong := w.verdict(t, "a", day(6), ledger.VerdictFail)
-	w.verdict(t, "b", day(7), ledger.VerdictMissed)
+	w.verdict(t, "a", day(5), "pass")
+	wrong := w.verdict(t, "a", day(6), "fail")
+	w.verdict(t, "b", day(7), "missed")
 
-	_, err := w.a.Correct(ctx, ledger.Correction{VerdictID: wrong.ID, Verdict: ledger.VerdictPass, Reason: "renamed", By: "owner"})
+	_, err := w.a.Correct(ctx, app.Correction{VerdictID: wrong.ID, Verdict: "pass", Reason: "renamed", By: "owner"})
 	require.NoError(t, err)
-	for _, c := range []ledger.Correction{
-		{VerdictID: "nope", Verdict: ledger.VerdictPass, Reason: "x", By: "owner"},
+	for _, c := range []app.Correction{
+		{VerdictID: "nope", Verdict: "pass", Reason: "x", By: "owner"},
 		{VerdictID: wrong.ID, Verdict: "great", Reason: "x", By: "owner"},
-		{VerdictID: wrong.ID, Verdict: ledger.VerdictPass},
+		{VerdictID: wrong.ID, Verdict: "pass"},
 	} {
 		_, err := w.a.Correct(ctx, c)
 		assert.Error(t, err, "%+v", c)
@@ -255,7 +253,7 @@ func TestVerdictsAndCorrect(t *testing.T) {
 	}{
 		{name: "all newest first", f: app.VerdictFilter{}, want: []string{"b@missed", "a@pass*", "a@pass"}},
 		{name: "one job", f: app.VerdictFilter{JobID: "a"}, want: []string{"a@pass*", "a@pass"}},
-		{name: "by verdict after corrections", f: app.VerdictFilter{Verdict: ledger.VerdictFail}, want: []string{}},
+		{name: "by verdict after corrections", f: app.VerdictFilter{Verdict: "fail"}, want: []string{}},
 		{name: "since", f: app.VerdictFilter{Since: day(6)}, want: []string{"b@missed", "a@pass*"}},
 		{name: "limit", f: app.VerdictFilter{Limit: 1}, want: []string{"b@missed"}},
 	}
@@ -346,9 +344,9 @@ func TestRecordSession(t *testing.T) {
 			if tc.file {
 				transcript(t, path, cwd, "오늘 가격 수집해줘")
 			}
-			recorded, err := w.a.RecordSession(context.Background(), ledger.Session{SessionID: "s", Cwd: cwd, TranscriptPath: path})
+			recorded, err := w.a.RecordSession(context.Background(), app.Session{SessionID: "s", Cwd: cwd, TranscriptPath: path})
 			require.NoError(t, err)
-			entries, err := w.a.Ledger().All(context.Background())
+			entries, err := openLedger(w.a).All(context.Background())
 			require.NoError(t, err)
 			complete := false
 			for _, e := range entries {
@@ -361,7 +359,7 @@ func TestRecordSession(t *testing.T) {
 		})
 	}
 	w := newWorld(t)
-	_, err := w.a.RecordSession(context.Background(), ledger.Session{})
+	_, err := w.a.RecordSession(context.Background(), app.Session{})
 	assert.Error(t, err)
 }
 
@@ -373,7 +371,7 @@ func TestTickLockAndStatus(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, st.LastTick)
 
-	unlock, err := lock.Acquire(ctx, w.a.Home.Lock("tick"), 0)
+	unlock, err := lock.Acquire(ctx, filepath.Join(w.a.Home, "tick.lock"), 0)
 	require.NoError(t, err)
 	busy, err := w.a.Tick(ctx)
 	require.NoError(t, err)
@@ -403,7 +401,7 @@ func TestExportFromStart(t *testing.T) {
 	ctx := context.Background()
 	_, err := w.a.SetExporter(ctx, "otlp", json.RawMessage(`{"enabled":true,"endpoint":"`+srv.URL+`"}`))
 	require.NoError(t, err)
-	w.verdict(t, "a", time.Date(2026, 10, 8, 9, 0, 0, 0, time.UTC), ledger.VerdictPass)
+	w.verdict(t, "a", time.Date(2026, 10, 8, 9, 0, 0, 0, time.UTC), "pass")
 
 	tcs := []struct {
 		name      string
@@ -428,7 +426,7 @@ func TestExportFromStart(t *testing.T) {
 func TestLedgerDamageIsReported(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	require.NoError(t, os.WriteFile(w.a.Home.Ledger(), []byte("not json\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(w.a.Home, "ledger.jsonl"), []byte("not json\n"), 0o600))
 	_, err := w.a.Status(context.Background())
 	require.NoError(t, err)
 	assert.True(t, strings.Contains(w.warn.String(), "skipped ledger line 1"))
@@ -466,7 +464,7 @@ func TestReportUnjudged(t *testing.T) {
 			w := newWorld(t)
 			saved := w.saved(t, w.job())
 			for _, d := range tc.args.judged {
-				w.verdict(t, saved.ID, day(d, 9), ledger.VerdictPass)
+				w.verdict(t, saved.ID, day(d, 9), "pass")
 			}
 			*w.now = tc.args.at
 			r, err := w.a.Report(context.Background(), tc.args.since)
@@ -496,14 +494,14 @@ func TestReportLateStart(t *testing.T) {
 		want string
 	}{
 		{name: "missed slot that ran late",
-			args: args{jobID: id, verdict: ledger.VerdictMissed, start: slot.Add(2 * time.Hour)},
+			args: args{jobID: id, verdict: "missed", start: slot.Add(2 * time.Hour)},
 			want: `{"session_id":"s1","started_at":"2026-10-09T11:00:00Z","grace":"30m0s"}`},
 		{name: "missed slot with no later session",
-			args: args{jobID: id, verdict: ledger.VerdictMissed, start: slot.AddDate(0, 0, 1).Add(time.Minute)}, want: "null"},
+			args: args{jobID: id, verdict: "missed", start: slot.AddDate(0, 0, 1).Add(time.Minute)}, want: "null"},
 		{name: "a fail isn't a late start",
-			args: args{jobID: id, verdict: ledger.VerdictFail, start: slot.Add(2 * time.Hour)}, want: "null"},
+			args: args{jobID: id, verdict: "fail", start: slot.Add(2 * time.Hour)}, want: "null"},
 		{name: "a job the ledger doesn't know",
-			args: args{jobID: "gone", verdict: ledger.VerdictMissed, start: slot.Add(2 * time.Hour)}, want: "null"},
+			args: args{jobID: "gone", verdict: "missed", start: slot.Add(2 * time.Hour)}, want: "null"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -511,7 +509,7 @@ func TestReportLateStart(t *testing.T) {
 			w := newWorld(t)
 			w.saved(t, w.job())
 			w.verdict(t, tc.args.jobID, slot, tc.args.verdict)
-			_, err := w.a.Ledger().Append(context.Background(), ledger.KindSession, ledger.Session{
+			_, err := openLedger(w.a).Append(context.Background(), ledger.KindSession, ledger.Session{
 				SessionID: "s1", Cwd: w.folder, StartedAt: tc.args.start, FirstPrompt: "오늘 가격 수집해줘"})
 			require.NoError(t, err)
 			*w.now = slot.AddDate(0, 0, 1).Add(time.Hour)
@@ -543,10 +541,10 @@ func TestPreviewPinsAndWarns(t *testing.T) {
 			require.NoError(t, os.WriteFile(script, []byte(tc.script), 0o700))
 			no := false
 			j := w.job()
-			j.Checks = []check.Spec{
-				{Kind: check.KindFile, Path: "out/{{date}}.csv"},
-				{Kind: check.KindFile, Path: "out/latest.csv", Fresh: &no},
-				{Kind: check.KindCommand, Run: "./check.sh"},
+			j.Checks = []app.CheckSpec{
+				{Kind: "file", Path: "out/{{date}}.csv"},
+				{Kind: "file", Path: "out/latest.csv", Fresh: &no},
+				{Kind: "command", Run: "./check.sh"},
 			}
 			p, err := w.a.Preview(context.Background(), j)
 			require.NoError(t, err)
@@ -576,7 +574,7 @@ func TestSaveRequiresCurrentScriptPreview(t *testing.T) {
 			script := filepath.Join(w.folder, "check.sh")
 			require.NoError(t, os.WriteFile(script, []byte("exit 0\n"), 0o700))
 			j := w.job()
-			j.Checks = []check.Spec{{Kind: check.KindCommand, Run: "sh check.sh"}}
+			j.Checks = []app.CheckSpec{{Kind: "command", Run: "sh check.sh"}}
 			_, err := w.a.Preview(ctx, j)
 			require.NoError(t, err)
 			require.NoError(t, os.WriteFile(script, []byte("exit 1\n"), 0o700))
@@ -588,4 +586,8 @@ func TestSaveRequiresCurrentScriptPreview(t *testing.T) {
 			assert.ErrorIs(t, err, tc.want)
 		})
 	}
+}
+
+func openLedger(a app.App) *ledger.Ledger {
+	return ledger.Open(filepath.Join(a.Home, "ledger.jsonl"), filepath.Join(a.Home, "ledger.lock"), a.Now, a.Version, func(int, error) {})
 }
