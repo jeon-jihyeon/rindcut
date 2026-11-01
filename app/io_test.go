@@ -3,6 +3,7 @@ package app_test
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,7 +13,7 @@ import (
 func brokenLedger(t *testing.T) world {
 	t.Helper()
 	w := newWorld(t)
-	require.NoError(t, os.Mkdir(w.a.Home.Path("ledger.jsonl"), 0o700))
+	require.NoError(t, os.Mkdir(filepath.Join(w.a.Home, "ledger.jsonl"), 0o700))
 	return w
 }
 
@@ -23,9 +24,9 @@ func TestPreviewLedgerFailure(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			w := newWorld(t)
-			path := w.a.Home.Path("ledger.jsonl")
+			path := filepath.Join(w.a.Home, "ledger.jsonl")
 			if tc.name == "append" {
-				path = w.a.Home.Lock("ledger")
+				path = filepath.Join(w.a.Home, "ledger.lock")
 			}
 			require.NoError(t, os.Mkdir(path, 0o700))
 			_, err := w.a.Preview(context.Background(), w.job())
@@ -41,11 +42,11 @@ func TestSaveLedgerFailure(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			w := newWorld(t)
-			path := w.a.Home.Path("ledger.jsonl")
+			path := filepath.Join(w.a.Home, "ledger.jsonl")
 			if tc.name == "append" {
 				_, err := w.a.Preview(context.Background(), w.job())
 				require.NoError(t, err)
-				path = w.a.Home.Lock("ledger")
+				path = filepath.Join(w.a.Home, "ledger.lock")
 				require.NoError(t, os.Remove(path))
 			}
 			require.NoError(t, os.Mkdir(path, 0o700))
@@ -79,9 +80,9 @@ func TestSetExporterFileFailure(t *testing.T) {
 			name := "nodloop"
 			switch tc.name {
 			case "read":
-				require.NoError(t, os.Mkdir(w.a.Home.Path("exporters.json"), 0o700))
+				require.NoError(t, os.Mkdir(filepath.Join(w.a.Home, "exporters.json"), 0o700))
 			case "write":
-				require.NoError(t, os.Mkdir(w.a.Home.Path("exporters.json.tmp"), 0o700))
+				require.NoError(t, os.Mkdir(filepath.Join(w.a.Home, "exporters.json.tmp"), 0o700))
 			case "unknown name":
 				name = "unknown"
 			}

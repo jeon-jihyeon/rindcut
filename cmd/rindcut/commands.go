@@ -11,10 +11,7 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/jeon-jihyeon/rindcut/internal/app"
-	"github.com/jeon-jihyeon/rindcut/internal/export"
-	"github.com/jeon-jihyeon/rindcut/internal/job"
-	"github.com/jeon-jihyeon/rindcut/internal/ledger"
+	"github.com/jeon-jihyeon/rindcut/app"
 	"github.com/jeon-jihyeon/rindcut/internal/mcp"
 	"github.com/jeon-jihyeon/rindcut/internal/output"
 )
@@ -37,13 +34,13 @@ var commands = map[string]func(c call) error{
 	"report": report,
 	"export": exportNow,
 	"install": func(c call) error {
-		if err := c.a.Installer.Install(); err != nil {
+		if err := c.a.Install(c.ctx); err != nil {
 			return err
 		}
 		fmt.Fprintln(c.e.stderr, "tick scheduled every 5 minutes")
 		return nil
 	},
-	"uninstall": func(c call) error { return c.a.Installer.Uninstall() },
+	"uninstall": func(c call) error { return c.a.Uninstall(c.ctx) },
 	"status":    status,
 	"mcp":       func(c call) error { return mcp.New(c.a).Run(c.ctx, &sdk.StdioTransport{}) },
 }
@@ -86,7 +83,7 @@ func tick(c call) error {
 		t.Rows = append(t.Rows, []string{"-", "busy", "-", "another tick is running"})
 	}
 	for _, e := range r.Verdicts {
-		var j ledger.Judgment
+		var j app.Judgment
 		if e.Decode(&j) == nil {
 			t.Rows = append(t.Rows, []string{j.SlotKey, string(j.Verdict), criticStatus(j.Critic), j.Note})
 		}
@@ -125,20 +122,10 @@ func probe(c call) error {
 		}
 		when = t
 	}
-	entries, err := a.Ledger().All(ctx)
+	p, err := a.Check(ctx, id, when)
 	if err != nil {
 		return err
 	}
-	j, ok := job.Current(app.Revisions(entries))[id]
-	if !ok || j.Removed {
-		return fmt.Errorf("%s: %w", id, app.ErrNoJob)
-	}
-	e, err := a.Judge().Probe(ctx, j, when, app.Fingerprint(j))
-	if err != nil {
-		return err
-	}
-	var p ledger.Judgment
-	_ = e.Decode(&p)
 	t := output.Table{Header: []string{"CHECK", "STATUS", "MESSAGE"}}
 	for _, r := range p.Checks {
 		t.Rows = append(t.Rows, []string{r.Kind, r.Status, r.Message})
@@ -150,7 +137,7 @@ func probe(c call) error {
 	return c.show(p, t)
 }
 
-func criticStatus(c *ledger.CriticResult) string {
+func criticStatus(c *app.CriticResult) string {
 	if c == nil {
 		return "-"
 	}
@@ -227,19 +214,9 @@ func listLedger(c call) error {
 	if err := parse(c.fs, c.args, 0); err != nil {
 		return err
 	}
-	entries, err := c.a.Ledger().All(c.ctx)
+	out, err := c.a.LedgerEntries(c.ctx, app.LedgerFilter{JobID: *jobID, Kind: *kind, Since: *since, Limit: *limit})
 	if err != nil {
 		return err
-	}
-	var out []ledger.Entry
-	for _, e := range entries {
-		recent := *since == 0 || c.a.Now().Sub(e.At) <= *since
-		if (*kind == "" || string(e.Kind) == *kind) && recent && (*jobID == "" || aboutJob(e, *jobID)) {
-			out = append(out, e)
-		}
-	}
-	if *limit > 0 && len(out) > *limit {
-		out = out[len(out)-*limit:]
 	}
 	// The ledger's own JSONL, so it pipes into jq and back
 	enc := json.NewEncoder(c.e.stdout)
@@ -250,18 +227,6 @@ func listLedger(c call) error {
 		}
 	}
 	return nil
-}
-
-// aboutJob is true for the job's revisions and for its probes and verdicts
-func aboutJob(e ledger.Entry, id string) bool {
-	var ref struct {
-		ID    string `json:"id"`
-		JobID string `json:"job_id"`
-	}
-	if json.Unmarshal(e.Data, &ref) != nil {
-		return false
-	}
-	return ref.JobID == id || (e.Kind == ledger.KindJob && ref.ID == id)
 }
 
 func exportNow(c call) error {
@@ -277,7 +242,7 @@ func exportNow(c call) error {
 	return c.show(lags, lagTable(lags))
 }
 
-func lagTable(lags []export.Lag) output.Table {
+func lagTable(lags []app.Lag) output.Table {
 	t := output.Table{Header: []string{"EXPORTER", "PENDING", "DROPPED", "ERROR"}}
 	for _, l := range lags {
 		t.Rows = append(t.Rows, []string{l.Exporter, strconv.Itoa(l.Pending), strconv.Itoa(l.Dropped), cmp.Or(l.LastError, l.LastDropped)})

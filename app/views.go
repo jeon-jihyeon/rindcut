@@ -9,39 +9,46 @@ import (
 	"sort"
 	"time"
 
-	"github.com/jeon-jihyeon/rindcut/internal/check"
 	"github.com/jeon-jihyeon/rindcut/internal/export"
 	"github.com/jeon-jihyeon/rindcut/internal/job"
 	"github.com/jeon-jihyeon/rindcut/internal/judge"
 	"github.com/jeon-jihyeon/rindcut/internal/ledger"
 )
 
-// Report is the daily summary: verdict counts, what went wrong, which jobs went quiet and what exports owe
-// A day where everything passed still has one, because a summary that stops arriving is the alarm
+// Quiet days still produce a report so missing delivery can reveal a stopped reporter
 type Report struct {
-	ledger.Report
+	Since          time.Time         `json:"since"`
+	Until          time.Time         `json:"until"`
+	Totals         Counts            `json:"totals"`
+	Jobs           map[string]Counts `json:"jobs"`
+	CriticProblems []CriticProblem   `json:"critic_problems"`
 	// Problems replaces the ledger's list so a missed slot can carry the session that started late
 	Problems []Problem         `json:"problems"`
 	Names    map[string]string `json:"names"`
-	// Unjudged counts, per job id, closed slots in the period still without a verdict two ticks later
+	// Closed slots remain unjudged after two ticks without a verdict
 	Unjudged map[string]Gap `json:"unjudged"`
-	// Silent lists the job ids in Unjudged, a sign the tick stopped
-	Silent []string     `json:"silent"`
-	Lag    []export.Lag `json:"lag"`
+	// Unjudged jobs can reveal a stopped tick
+	Silent []string `json:"silent"`
+	Lag    []Lag    `json:"lag"`
 }
 
-// Problem is a ledger problem plus, for a missed session job, the late session that may explain it
 type Problem struct {
-	ledger.Problem
+	VerdictID string     `json:"verdict_id"`
+	JobID     string     `json:"job_id"`
+	SlotKey   string     `json:"slot_key"`
+	Slot      time.Time  `json:"slot"`
+	Verdict   string     `json:"verdict"`
+	Reason    string     `json:"reason"`
+	Corrected bool       `json:"corrected,omitempty"`
 	LateStart *LateStart `json:"late_start,omitempty"`
 }
 
 // LateStart is a session that ran after the slot's window closed and before the next slot
 // It is shown next to the missed verdict and never changes it
 type LateStart struct {
-	SessionID string         `json:"session_id"`
-	StartedAt time.Time      `json:"started_at"`
-	Grace     check.Duration `json:"grace"`
+	SessionID string    `json:"session_id"`
+	StartedAt time.Time `json:"started_at"`
+	Grace     Duration  `json:"grace"`
 }
 
 // Gap counts the closed slots of one job that never got a verdict
@@ -50,32 +57,43 @@ type Gap struct {
 	Expired int `json:"expired"` // beyond the lookback and never judged
 }
 
-// Report reads the ledger and cursors only, so a broken exporter setting never stops the summary
+// A broken exporter setting must not prevent the summary
+// Reporting reads the ledger and cursors without constructing exporters
 func (a App) Report(ctx context.Context, since time.Duration) (Report, error) {
-	entries, err := a.Ledger().All(ctx)
+	entries, err := a.ledger().All(ctx)
 	if err != nil {
 		return Report{}, err
 	}
 	now := a.Now()
 	from := now.Add(-since)
-	revs := Revisions(entries)
+	revs := revisions(entries)
 	summary := ledger.Summary(entries, from, now)
-	r := Report{Report: summary, Problems: lateStarts(summary.Problems, revs, sessionsSince(entries, from)), Names: Names(entries),
-		Unjudged: unjudged(entries, revs, from, now), Silent: []string{}, Lag: []export.Lag{}}
+	r := Report{Since: summary.Since, Until: summary.Until, Totals: Counts(summary.Totals),
+		Jobs: map[string]Counts{}, CriticProblems: []CriticProblem{},
+		Problems: lateStarts(summary.Problems, revs, sessionsSince(entries, from)), Names: names(entries),
+		Unjudged: unjudged(entries, revs, from, now), Silent: []string{}, Lag: []Lag{}}
+	for id, counts := range summary.Jobs {
+		r.Jobs[id] = Counts(counts)
+	}
+	for _, p := range summary.CriticProblems {
+		r.CriticProblems = append(r.CriticProblems, CriticProblem{VerdictID: p.VerdictID,
+			JobID: p.JobID, SlotKey: p.SlotKey, Slot: p.Slot, Critic: criticView(p.Critic)})
+	}
 	for id := range r.Unjudged {
 		r.Silent = append(r.Silent, id)
 	}
 	sort.Strings(r.Silent)
-	if s, err := a.Settings(); err == nil {
-		r.Lag = export.Lags(a.cursorDir(), s.Enabled(a.UserHome, a.SearchPath), entries)
+	if s, err := a.settings(); err == nil {
+		r.Lag = lagViews(export.Lags(a.cursorDir(), s.Enabled(a.UserHome, a.SearchPath), entries))
 	} else {
-		r.Lag = append(r.Lag, export.Lag{Exporter: "settings", LastError: err.Error()})
+		r.Lag = append(r.Lag, Lag{Exporter: "settings", LastError: err.Error()})
 	}
 	return r, nil
 }
 
 // unjudged counts each closed slot in the period that has no verdict
-// A slot gets its verdict at the first tick after its window, so only a slot two ticks past that counts
+// A slot gets its verdict at the first tick after its window
+// Only a slot two ticks past that counts
 func unjudged(entries []ledger.Entry, revs []job.Job, from, now time.Time) map[string]Gap {
 	judged := map[string]bool{}
 	for _, e := range entries {
@@ -104,20 +122,21 @@ func unjudged(entries []ledger.Entry, revs []job.Job, from, now time.Time) map[s
 func lateStarts(problems []ledger.Problem, revs []job.Job, sessions []ledger.Session) []Problem {
 	out := make([]Problem, len(problems))
 	for i, p := range problems {
-		out[i] = Problem{Problem: p}
+		out[i] = Problem{VerdictID: p.VerdictID, JobID: p.JobID, SlotKey: p.SlotKey, Slot: p.Slot,
+			Verdict: string(p.Verdict), Reason: p.Reason, Corrected: p.Corrected}
 		r, ok := job.At(revs, p.JobID, p.Slot)
 		if p.Verdict != ledger.VerdictMissed || !ok || r.Evidence != job.EvidenceSession {
 			continue
 		}
 		slot := job.Slot{JobID: p.JobID, At: p.Slot, End: p.Slot.Add(time.Duration(r.Grace))}
 		if sess, late := judge.Late(r, slot, sessions); late {
-			out[i].LateStart = &LateStart{SessionID: sess.SessionID, StartedAt: sess.StartedAt, Grace: r.Grace}
+			out[i].LateStart = &LateStart{SessionID: sess.SessionID, StartedAt: sess.StartedAt, Grace: Duration(r.Grace)}
 		}
 	}
 	return out
 }
 
-// sessionsSince lists sessions that started in the report period, the only ones a late start may cite
+// A late start may cite only sessions that began in the report period
 func sessionsSince(entries []ledger.Entry, from time.Time) []ledger.Session {
 	var out []ledger.Session
 	for _, e := range entries {
@@ -130,22 +149,21 @@ func sessionsSince(entries []ledger.Entry, from time.Time) []ledger.Session {
 }
 
 type VerdictView struct {
-	ID         string             `json:"id"`
-	At         time.Time          `json:"at"`
-	Judgment   ledger.Judgment    `json:"judgment"`
-	Correction *ledger.Correction `json:"correction,omitempty"`
+	ID         string      `json:"id"`
+	At         time.Time   `json:"at"`
+	Judgment   Judgment    `json:"judgment"`
+	Correction *Correction `json:"correction,omitempty"`
 }
 
 type VerdictFilter struct {
 	JobID   string
 	Since   time.Time
-	Verdict ledger.Verdict
+	Verdict string
 	Limit   int
 }
 
-// Verdicts lists verdicts newest first with the correction in force, the full evidence included
 func (a App) Verdicts(ctx context.Context, f VerdictFilter) ([]VerdictView, error) {
-	entries, err := a.Ledger().All(ctx)
+	entries, err := a.ledger().All(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -157,39 +175,42 @@ func (a App) Verdicts(ctx context.Context, f VerdictFilter) ([]VerdictView, erro
 		if e.Kind != ledger.KindVerdict || e.Decode(&j) != nil || j.Slot.Before(f.Since) || (f.JobID != "" && j.JobID != f.JobID) {
 			continue
 		}
-		v := VerdictView{ID: e.ID, At: e.At, Judgment: j}
+		v := VerdictView{ID: e.ID, At: e.At, Judgment: judgmentView(j)}
 		effective := j.Verdict
 		if c, ok := fixes[e.ID]; ok {
-			v.Correction, effective = &c, c.Verdict
+			view := Correction{VerdictID: c.VerdictID, Verdict: string(c.Verdict), Reason: c.Reason, By: c.By}
+			v.Correction, effective = &view, c.Verdict
 		}
-		if f.Verdict == "" || effective == f.Verdict {
+		if f.Verdict == "" || string(effective) == f.Verdict {
 			out = append(out, v)
 		}
 	}
 	return out, nil
 }
 
-// Correct overrides a verdict with a person's reason, leaving the original in place
-func (a App) Correct(ctx context.Context, c ledger.Correction) (ledger.Entry, error) {
+// Corrections preserve the original verdict
+func (a App) Correct(ctx context.Context, in Correction) (Entry, error) {
+	c := ledger.Correction{VerdictID: in.VerdictID, Verdict: ledger.Verdict(in.Verdict), Reason: in.Reason, By: in.By}
 	if !c.Verdict.Valid() {
-		return ledger.Entry{}, fmt.Errorf("verdict %q must be pass, fail, missed or inconclusive", c.Verdict)
+		return Entry{}, fmt.Errorf("verdict %q must be pass, fail, missed or inconclusive", c.Verdict)
 	}
 	if c.Reason == "" || c.By == "" {
-		return ledger.Entry{}, errors.New("a correction needs the reason and who gave it")
+		return Entry{}, errors.New("a correction needs the reason and who gave it")
 	}
-	entries, err := a.Ledger().All(ctx)
+	entries, err := a.ledger().All(ctx)
 	if err != nil {
-		return ledger.Entry{}, err
+		return Entry{}, err
 	}
 	for _, e := range entries {
 		if e.ID == c.VerdictID && e.Kind == ledger.KindVerdict {
-			return a.Ledger().Append(ctx, ledger.KindCorrection, c)
+			entry, err := a.ledger().Append(ctx, ledger.KindCorrection, c)
+			return entryView(entry), err
 		}
 	}
-	return ledger.Entry{}, fmt.Errorf("no verdict %s", c.VerdictID)
+	return Entry{}, fmt.Errorf("no verdict %s", c.VerdictID)
 }
 
-func (a App) Settings() (export.Settings, error) {
+func (a App) settings() (export.Settings, error) {
 	s, err := export.LoadSettings(a.settingsPath())
 	if err != nil {
 		return s, fmt.Errorf("exporters.json: %w", err)
@@ -198,15 +219,15 @@ func (a App) Settings() (export.Settings, error) {
 }
 
 type ExporterResult struct {
-	Settings export.Settings `json:"settings"`
-	// Test is "ok", "off" for a disabled exporter, or what went wrong on a test send
+	Settings Settings `json:"settings"`
+	// The test result can report a disabled exporter or a failed send
 	Test string `json:"test"`
 }
 
 // SetExporter replaces one exporter's settings and tests them with one send right away
-// The settings are kept even when the test fails, so the owner can fix a key without retyping the rest
+// Failed test sends preserve the settings for an incremental correction
 func (a App) SetExporter(ctx context.Context, name string, raw json.RawMessage) (ExporterResult, error) {
-	s, err := a.Settings()
+	s, err := a.settings()
 	if err != nil {
 		return ExporterResult{}, err
 	}
@@ -216,7 +237,7 @@ func (a App) SetExporter(ctx context.Context, name string, raw json.RawMessage) 
 	if err := export.SaveSettings(a.settingsPath(), s); err != nil {
 		return ExporterResult{}, err
 	}
-	out := ExporterResult{Settings: s.Masked(), Test: "off"}
+	out := ExporterResult{Settings: settingsView(s.Masked()), Test: "off"}
 	built, err := s.Build(ctx, nil, nil, a.Version, a.UserHome, a.SearchPath, a.cursorDir())
 	if err != nil {
 		out.Test = err.Error()
@@ -234,14 +255,16 @@ func (a App) SetExporter(ctx context.Context, name string, raw json.RawMessage) 
 	return out, nil
 }
 
-// RecordSession appends what the SessionEnd hook saw, filled from the transcript head
-// Only sessions in a session job's folder are kept, so the owner's other work leaves no trace
-// An unreadable transcript is recorded as it is and completed by the tick's backfill, never filled with guesses
-func (a App) RecordSession(ctx context.Context, hook ledger.Session) (bool, error) {
+// Only session job folders may leave a trace
+// Backfill may complete an unreadable transcript without guessing its contents
+func (a App) RecordSession(ctx context.Context, in Session) (bool, error) {
+	hook := ledger.Session{SessionID: in.SessionID, RunID: in.RunID, Cwd: in.Cwd, StartedAt: in.StartedAt,
+		EndedAt: in.EndedAt, FirstPrompt: in.FirstPrompt, TranscriptPath: in.TranscriptPath,
+		EndReason: in.EndReason, Source: ledger.Source(in.Source)}
 	if hook.SessionID == "" {
 		return false, errors.New("hook input has no session_id")
 	}
-	entries, err := a.Ledger().All(ctx)
+	entries, err := a.ledger().All(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -252,11 +275,11 @@ func (a App) RecordSession(ctx context.Context, hook ledger.Session) (bool, erro
 			s.Cwd = t.Cwd
 		}
 	}
-	if !judge.InFolders(s.Cwd, judge.SessionFolders(Revisions(entries))) {
+	if !judge.InFolders(s.Cwd, judge.SessionFolders(revisions(entries))) {
 		return false, nil
 	}
 	s.EndedAt, s.Source = a.Now().UTC(), ledger.SourceHook
-	_, err = a.Ledger().Append(ctx, ledger.KindSession, s)
+	_, err = a.ledger().Append(ctx, ledger.KindSession, s)
 	return err == nil, err
 }
 
@@ -269,17 +292,17 @@ type Status struct {
 }
 
 func (a App) Status(ctx context.Context) (Status, error) {
-	entries, err := a.Ledger().All(ctx)
+	entries, err := a.ledger().All(ctx)
 	if err != nil {
 		return Status{}, err
 	}
-	st := Status{Version: a.Version, Home: string(a.Home), TickInstalled: a.Installer.Installed()}
-	for _, j := range job.Current(Revisions(entries)) {
+	st := Status{Version: a.Version, Home: string(a.Home), TickInstalled: a.scheduler().Installed()}
+	for _, j := range job.Current(revisions(entries)) {
 		if !j.Removed {
 			st.Jobs++
 		}
 	}
-	if b, err := os.ReadFile(a.Home.Path("last-tick")); err == nil {
+	if b, err := os.ReadFile(a.homePath("last-tick")); err == nil {
 		if at, err := time.Parse(time.RFC3339, string(b)); err == nil {
 			st.LastTick = &at
 		}

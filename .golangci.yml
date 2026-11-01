@@ -31,7 +31,7 @@ linters:
     # The layer rules of the capability map
     # lock and check import no rindcut package, ledger imports lock only, job imports check only
     # judge decides and records, export carries the ledger out, and neither imports the other
-    # app wires them for cmd and mcp, and cmd/rindcut is the composition root
+    # app owns the shared use cases and cmd and mcp render its DTOs
     depguard:
       rules:
         base:
@@ -46,7 +46,7 @@ linters:
               desc: lock, check and ledger sit below judge
             - pkg: github.com/jeon-jihyeon/rindcut/internal/export
               desc: lock, check and ledger sit below export
-            - pkg: github.com/jeon-jihyeon/rindcut/internal/app
+            - pkg: github.com/jeon-jihyeon/rindcut/app
               desc: lock, check and ledger sit below app
             - pkg: github.com/jeon-jihyeon/rindcut/internal/mcp
               desc: lock, check and ledger sit below mcp
@@ -81,7 +81,7 @@ linters:
               desc: job is below judge
             - pkg: github.com/jeon-jihyeon/rindcut/internal/export
               desc: job is below export
-            - pkg: github.com/jeon-jihyeon/rindcut/internal/app
+            - pkg: github.com/jeon-jihyeon/rindcut/app
               desc: job is below app
             - pkg: github.com/jeon-jihyeon/rindcut/internal/mcp
               desc: job is below mcp
@@ -91,7 +91,7 @@ linters:
           deny:
             - pkg: github.com/jeon-jihyeon/rindcut/internal/export
               desc: judge writes verdicts and never calls an exporter
-            - pkg: github.com/jeon-jihyeon/rindcut/internal/app
+            - pkg: github.com/jeon-jihyeon/rindcut/app
               desc: judge is below app
             - pkg: github.com/jeon-jihyeon/rindcut/internal/mcp
               desc: judge is below mcp
@@ -105,13 +105,39 @@ linters:
               desc: export reads the ledger only
             - pkg: github.com/jeon-jihyeon/rindcut/internal/check
               desc: export reads the ledger only
-            - pkg: github.com/jeon-jihyeon/rindcut/internal/app
+            - pkg: github.com/jeon-jihyeon/rindcut/app
               desc: export is below app
             - pkg: github.com/jeon-jihyeon/rindcut/internal/mcp
               desc: export is below mcp
+        mcp:
+          files:
+            - "**/internal/mcp/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/
+              desc: MCP handlers use application inputs and outputs only
+        cli:
+          files:
+            - "**/cmd/rindcut/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/job
+              desc: CLI handlers use application inputs and outputs only
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/check
+              desc: CLI handlers use application inputs and outputs only
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/ledger
+              desc: CLI handlers never read storage directly
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/judge
+              desc: CLI handlers never assemble scheduled work
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/export
+              desc: CLI handlers never assemble scheduled exports
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/home
+              desc: application use cases own the home
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/lock
+              desc: application use cases own transaction locks
         app:
           files:
-            - "**/internal/app/**"
+            - "**/app/**"
           deny:
             - pkg: github.com/jeon-jihyeon/rindcut/internal/mcp
               desc: app is below mcp
