@@ -5,7 +5,7 @@
 # 3. go install of the same version when Go is present and the release could not be fetched
 # 4. another rindcut on PATH when it answers the plugin version, or any version when RINDCUT_ALLOW_PATH is 1
 # Every source that runs is linked from the stable path, which the tick schedule calls
-# The version is read from the plugin manifest so the plugin and the binary it runs never drift
+# The plugin manifest selects the version requested from the release or Go
 set -eu
 
 REPO="jeon-jihyeon/rindcut"
@@ -91,7 +91,11 @@ fetch() {
     rm -rf "$tmp"
     exit 1
   fi
-  if ! tar -xzf "${tmp}/${ARCHIVE}" -C "$tmp" rindcut || ! chmod +x "${tmp}/rindcut" || ! mv -f "${tmp}/rindcut" "$BIN"; then
+  if ! tar -tvzf "${tmp}/${ARCHIVE}" rindcut |
+    awk '{ if (substr($1, 1, 1) != "-") invalid = 1; count++ } END { exit (invalid || count != 1) }' ||
+    ! tar -xzf "${tmp}/${ARCHIVE}" -C "$tmp" rindcut ||
+    [ ! -f "${tmp}/rindcut" ] || [ -L "${tmp}/rindcut" ] ||
+    ! chmod +x "${tmp}/rindcut" || ! mv -f "${tmp}/rindcut" "$BIN"; then
     rm -rf "$tmp"
     return 1
   fi
@@ -106,7 +110,7 @@ fi
 
 if command -v go >/dev/null 2>&1; then
   echo "rindcut: couldn't fetch release ${TAG} for ${os}/${arch}, building with go install" >&2
-  if GOBIN="$BIN_DIR" go install "github.com/${REPO}/cmd/rindcut@${TAG}"; then
+  if GOBIN="$BIN_DIR" go install -trimpath -ldflags "-X main.version=${version}" "github.com/${REPO}/cmd/rindcut@${TAG}"; then
     stable "$BIN"
     exec "$BIN" "$@"
   fi
