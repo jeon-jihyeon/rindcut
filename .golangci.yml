@@ -109,6 +109,31 @@ linters:
               desc: export is below app
             - pkg: github.com/jeon-jihyeon/rindcut/internal/mcp
               desc: export is below mcp
+        observe:
+          files:
+            - "**/internal/observe/*.go"
+            - "!$test"
+          deny:
+            - pkg: github.com/jeon-jihyeon/rindcut/
+              desc: observation rules have no infrastructure dependency
+        observe-adapters:
+          files:
+            - "**/internal/observe/command/**"
+            - "**/internal/observe/store/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/observe
+              desc: adapters return owned DTOs and never import observation rules
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/job
+              desc: adapters have no scheduled job policy
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/judge
+              desc: adapters have no scheduled verdict policy
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/export
+              desc: adapters never call scheduled exporters
+            - pkg: github.com/jeon-jihyeon/rindcut/app
+              desc: adapters sit below application use cases
+            - pkg: github.com/jeon-jihyeon/rindcut/internal/mcp
+              desc: adapters never depend on entry points
         mcp:
           files:
             - "**/internal/mcp/**"

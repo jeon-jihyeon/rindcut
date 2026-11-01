@@ -1,0 +1,796 @@
+[
+  {
+    "name": "source_request",
+    "schema": "source-request",
+    "valid": true,
+    "document": {
+      "protocol": "rindcut.source/v1",
+      "operation": "read",
+      "source_id": "acme",
+      "source_revision": 1,
+      "source_instance": "acme",
+      "stream": "actions",
+      "generation": null,
+      "cursor": null,
+      "limit": 100
+    }
+  },
+  {
+    "name": "source_page",
+    "schema": "source-response",
+    "valid": true,
+    "document": {
+      "protocol": "rindcut.source/v1",
+      "source_id": "acme",
+      "source_revision": 1,
+      "source_instance": "acme",
+      "stream": "actions",
+      "generation": "g1",
+      "capability": {
+        "kind": "event_stream",
+        "types": [],
+        "limitations": []
+      },
+      "status": "ok",
+      "records": [
+        {
+          "source_instance": "acme",
+          "generation": "g1",
+          "stream": "actions",
+          "id": "e1",
+          "type": "acme.action",
+          "schema_version": "v1",
+          "adapter_revision": "v1",
+          "projection_profile": "metadata",
+          "links": [],
+          "attributes": {},
+          "evidence": []
+        }
+      ],
+      "next_cursor": "1",
+      "has_more": false,
+      "coverage": {
+        "kind": "event_stream",
+        "limitations": []
+      }
+    }
+  },
+  {
+    "name": "observer_response",
+    "schema": "observer-response",
+    "valid": true,
+    "document": {
+      "protocol": "rindcut.observer/v1",
+      "source_id": "acme",
+      "source_revision": 1,
+      "observer_id": "effect",
+      "observer_revision": 1,
+      "criterion_id": "landed",
+      "criterion_revision": "v1",
+      "series_id": "s1",
+      "target_ref": {
+        "store_id": "store",
+        "capture_id": "c1"
+      },
+      "result": "pending",
+      "reason_code": "not_yet",
+      "evidence": []
+    }
+  },
+  {
+    "name": "unknown_event_field",
+    "schema": "source-response",
+    "valid": false,
+    "document": {
+      "protocol": "rindcut.source/v1",
+      "source_id": "acme",
+      "source_revision": 1,
+      "source_instance": "acme",
+      "stream": "actions",
+      "generation": "g1",
+      "capability": {
+        "kind": "event_stream",
+        "types": [],
+        "limitations": []
+      },
+      "status": "ok",
+      "records": [
+        {
+          "source_instance": "acme",
+          "generation": "g1",
+          "stream": "actions",
+          "id": "e1",
+          "type": "acme.action",
+          "schema_version": "v1",
+          "adapter_revision": "v1",
+          "projection_profile": "metadata",
+          "links": [],
+          "attributes": {},
+          "evidence": [],
+          "payload": "forbidden"
+        }
+      ],
+      "next_cursor": "1",
+      "has_more": false,
+      "coverage": {
+        "kind": "event_stream",
+        "limitations": []
+      }
+    }
+  },
+  {
+    "name": "nested_attribute",
+    "schema": "source-response",
+    "valid": false,
+    "document": {
+      "protocol": "rindcut.source/v1",
+      "source_id": "acme",
+      "source_revision": 1,
+      "source_instance": "acme",
+      "stream": "actions",
+      "generation": "g1",
+      "capability": {
+        "kind": "event_stream",
+        "types": [],
+        "limitations": []
+      },
+      "status": "ok",
+      "records": [
+        {
+          "source_instance": "acme",
+          "generation": "g1",
+          "stream": "actions",
+          "id": "e1",
+          "type": "acme.action",
+          "schema_version": "v1",
+          "adapter_revision": "v1",
+          "projection_profile": "metadata",
+          "links": [],
+          "attributes": {
+            "n": {
+              "nested": true
+            }
+          },
+          "evidence": []
+        }
+      ],
+      "next_cursor": "1",
+      "has_more": false,
+      "coverage": {
+        "kind": "event_stream",
+        "limitations": []
+      }
+    }
+  },
+  {
+    "name": "invalid_cursor_response",
+    "schema": "source-response",
+    "valid": true,
+    "document": {
+      "protocol": "rindcut.source/v1",
+      "source_id": "acme",
+      "source_revision": 1,
+      "source_instance": "acme",
+      "stream": "actions",
+      "generation": "g1",
+      "capability": {
+        "kind": "event_stream",
+        "types": [],
+        "limitations": []
+      },
+      "status": "cursor_invalid",
+      "records": [],
+      "next_cursor": null,
+      "has_more": false,
+      "coverage": {
+        "kind": "event_stream",
+        "limitations": []
+      }
+    }
+  },
+  {
+    "name": "authority_result",
+    "schema": "observer-response",
+    "valid": false,
+    "document": {
+      "protocol": "rindcut.observer/v1",
+      "source_id": "acme",
+      "source_revision": 1,
+      "observer_id": "effect",
+      "observer_revision": 1,
+      "criterion_id": "landed",
+      "criterion_revision": "v1",
+      "series_id": "s1",
+      "target_ref": {
+        "store_id": "store",
+        "capture_id": "c1"
+      },
+      "result": "approved",
+      "reason_code": "not_yet",
+      "evidence": []
+    }
+  },
+  {
+    "name": "null_next_time",
+    "schema": "observer-response",
+    "valid": false,
+    "document": {
+      "protocol": "rindcut.observer/v1",
+      "source_id": "acme",
+      "source_revision": 1,
+      "observer_id": "effect",
+      "observer_revision": 1,
+      "criterion_id": "landed",
+      "criterion_revision": "v1",
+      "series_id": "s1",
+      "target_ref": {
+        "store_id": "store",
+        "capture_id": "c1"
+      },
+      "result": "pending",
+      "reason_code": "not_yet",
+      "evidence": [],
+      "next_observe_at": null
+    }
+  },
+  {
+    "name": "request_limit",
+    "schema": "source-request",
+    "valid": false,
+    "document": {
+      "protocol": "rindcut.source/v1",
+      "operation": "read",
+      "source_id": "acme",
+      "source_revision": 1,
+      "source_instance": "acme",
+      "stream": "actions",
+      "generation": null,
+      "cursor": null,
+      "limit": 101
+    }
+  },
+  {
+    "name": "url_evidence",
+    "schema": "source-response",
+    "valid": false,
+    "document": {
+      "protocol": "rindcut.source/v1",
+      "source_id": "acme",
+      "source_revision": 1,
+      "source_instance": "acme",
+      "stream": "actions",
+      "generation": "g1",
+      "capability": {
+        "kind": "event_stream",
+        "types": [],
+        "limitations": []
+      },
+      "status": "ok",
+      "records": [
+        {
+          "source_instance": "acme",
+          "generation": "g1",
+          "stream": "actions",
+          "id": "e1",
+          "type": "acme.action",
+          "schema_version": "v1",
+          "adapter_revision": "v1",
+          "projection_profile": "metadata",
+          "links": [],
+          "attributes": {},
+          "evidence": [
+            {
+              "kind": "read",
+              "ref": {
+                "namespace": "https",
+                "id": "https://example.com"
+              }
+            }
+          ]
+        }
+      ],
+      "next_cursor": "1",
+      "has_more": false,
+      "coverage": {
+        "kind": "event_stream",
+        "limitations": []
+      }
+    }
+  },
+  {
+    "name": "records_need_cursor",
+    "schema": "source-response",
+    "valid": false,
+    "document": {
+      "protocol": "rindcut.source/v1",
+      "source_id": "acme",
+      "source_revision": 1,
+      "source_instance": "acme",
+      "stream": "actions",
+      "generation": "g1",
+      "capability": {
+        "kind": "event_stream",
+        "types": [],
+        "limitations": []
+      },
+      "status": "ok",
+      "records": [
+        {
+          "source_instance": "acme",
+          "generation": "g1",
+          "stream": "actions",
+          "id": "e1",
+          "type": "acme.action",
+          "schema_version": "v1",
+          "adapter_revision": "v1",
+          "projection_profile": "metadata",
+          "links": [],
+          "attributes": {},
+          "evidence": []
+        }
+      ],
+      "next_cursor": null,
+      "has_more": false,
+      "coverage": {
+        "kind": "event_stream",
+        "limitations": []
+      }
+    }
+  },
+  {
+    "name": "has_more_needs_cursor",
+    "schema": "source-response",
+    "valid": false,
+    "document": {
+      "protocol": "rindcut.source/v1",
+      "source_id": "acme",
+      "source_revision": 1,
+      "source_instance": "acme",
+      "stream": "actions",
+      "generation": "g1",
+      "capability": {
+        "kind": "event_stream",
+        "types": [],
+        "limitations": []
+      },
+      "status": "ok",
+      "records": [],
+      "next_cursor": null,
+      "has_more": true,
+      "coverage": {
+        "kind": "event_stream",
+        "limitations": []
+      }
+    }
+  },
+  {
+    "name": "empty_first_page",
+    "schema": "source-response",
+    "valid": true,
+    "document": {
+      "protocol": "rindcut.source/v1",
+      "source_id": "acme",
+      "source_revision": 1,
+      "source_instance": "acme",
+      "stream": "actions",
+      "generation": "g1",
+      "capability": {
+        "kind": "event_stream",
+        "types": [],
+        "limitations": []
+      },
+      "status": "ok",
+      "records": [],
+      "next_cursor": null,
+      "has_more": false,
+      "coverage": {
+        "kind": "event_stream",
+        "limitations": []
+      }
+    }
+  },
+  {
+    "name": "more_page",
+    "schema": "source-response",
+    "valid": true,
+    "document": {
+      "protocol": "rindcut.source/v1",
+      "source_id": "acme",
+      "source_revision": 1,
+      "source_instance": "acme",
+      "stream": "actions",
+      "generation": "g1",
+      "capability": {
+        "kind": "event_stream",
+        "types": [],
+        "limitations": []
+      },
+      "status": "ok",
+      "records": [],
+      "next_cursor": "1",
+      "has_more": true,
+      "coverage": {
+        "kind": "event_stream",
+        "limitations": []
+      }
+    }
+  },
+  {
+    "name": "unavailable_needs_limitation",
+    "schema": "source-response",
+    "valid": false,
+    "document": {
+      "protocol": "rindcut.source/v1",
+      "source_id": "acme",
+      "source_revision": 1,
+      "source_instance": "acme",
+      "stream": "actions",
+      "generation": null,
+      "capability": {
+        "kind": "event_stream",
+        "types": [],
+        "limitations": []
+      },
+      "status": "unavailable",
+      "records": [],
+      "next_cursor": null,
+      "has_more": false,
+      "coverage": {
+        "kind": "unknown",
+        "limitations": []
+      }
+    }
+  },
+  {
+    "name": "unavailable_declared",
+    "schema": "source-response",
+    "valid": true,
+    "document": {
+      "protocol": "rindcut.source/v1",
+      "source_id": "acme",
+      "source_revision": 1,
+      "source_instance": "acme",
+      "stream": "actions",
+      "generation": null,
+      "capability": {
+        "kind": "event_stream",
+        "types": [],
+        "limitations": []
+      },
+      "status": "unavailable",
+      "records": [],
+      "next_cursor": null,
+      "has_more": false,
+      "coverage": {
+        "kind": "unknown",
+        "limitations": [
+          "unavailable"
+        ]
+      }
+    }
+  },
+  {
+    "name": "definition_defaults",
+    "schema": "definition",
+    "valid": true,
+    "document": {
+      "id": "acme",
+      "enabled": true,
+      "source_instance": "acme",
+      "stream": "actions",
+      "capability": {
+        "kind": "event_stream",
+        "types": [],
+        "limitations": []
+      },
+      "adapter_revision": "v1",
+      "projection_profile": "metadata",
+      "reader": {
+        "program": "acme",
+        "args": [],
+        "allowed_attributes": []
+      },
+      "observers": [
+        {
+          "id": "effect",
+          "types": [
+            "acme.action"
+          ],
+          "criterion_id": "landed",
+          "criterion_revision": "v1",
+          "parameters": {},
+          "program": "acme",
+          "args": [],
+          "deadline_seconds": 60
+        }
+      ]
+    }
+  },
+  {
+    "name": "definition_empty_mode",
+    "schema": "definition",
+    "valid": false,
+    "document": {
+      "id": "acme",
+      "enabled": true,
+      "source_instance": "acme",
+      "stream": "actions",
+      "capability": {
+        "kind": "event_stream",
+        "types": [],
+        "limitations": []
+      },
+      "adapter_revision": "v1",
+      "projection_profile": "metadata",
+      "reader": {
+        "program": "acme",
+        "args": [],
+        "allowed_attributes": []
+      },
+      "observers": [
+        {
+          "id": "effect",
+          "types": [
+            "acme.action"
+          ],
+          "criterion_id": "landed",
+          "criterion_revision": "v1",
+          "parameters": {},
+          "program": "acme",
+          "args": [],
+          "deadline_seconds": 60,
+          "mode": ""
+        }
+      ]
+    }
+  },
+  {
+    "name": "definition_empty_actor_kind",
+    "schema": "definition",
+    "valid": false,
+    "document": {
+      "id": "acme",
+      "enabled": true,
+      "source_instance": "acme",
+      "stream": "actions",
+      "capability": {
+        "kind": "event_stream",
+        "types": [],
+        "limitations": []
+      },
+      "adapter_revision": "v1",
+      "projection_profile": "metadata",
+      "reader": {
+        "program": "acme",
+        "args": [],
+        "allowed_attributes": []
+      },
+      "observers": [
+        {
+          "id": "effect",
+          "types": [
+            "acme.action"
+          ],
+          "criterion_id": "landed",
+          "criterion_revision": "v1",
+          "parameters": {},
+          "program": "acme",
+          "args": [],
+          "deadline_seconds": 60,
+          "actor_kind": ""
+        }
+      ]
+    }
+  },
+  {
+    "name": "decimal_integer_wire",
+    "schema": "source-response",
+    "valid": true,
+    "document": {
+      "protocol": "rindcut.source/v1",
+      "source_id": "acme",
+      "source_revision": 1,
+      "source_instance": "acme",
+      "stream": "actions",
+      "generation": "g1",
+      "capability": {
+        "kind": "event_stream",
+        "types": [],
+        "limitations": []
+      },
+      "status": "ok",
+      "records": [
+        {
+          "source_instance": "acme",
+          "generation": "g1",
+          "stream": "actions",
+          "id": "e1",
+          "type": "acme.action",
+          "schema_version": "v1",
+          "adapter_revision": "v1",
+          "projection_profile": "metadata",
+          "links": [],
+          "attributes": {
+            "n": 1.0
+          },
+          "evidence": []
+        }
+      ],
+      "next_cursor": "1",
+      "has_more": false,
+      "coverage": {
+        "kind": "event_stream",
+        "limitations": []
+      }
+    },
+    "wire_valid": false
+  },
+  {
+    "name": "exponent_integer_wire",
+    "schema": "source-response",
+    "valid": true,
+    "document": {
+      "protocol": "rindcut.source/v1",
+      "source_id": "acme",
+      "source_revision": 1,
+      "source_instance": "acme",
+      "stream": "actions",
+      "generation": "g1",
+      "capability": {
+        "kind": "event_stream",
+        "types": [],
+        "limitations": []
+      },
+      "status": "ok",
+      "records": [
+        {
+          "source_instance": "acme",
+          "generation": "g1",
+          "stream": "actions",
+          "id": "e1",
+          "type": "acme.action",
+          "schema_version": "v1",
+          "adapter_revision": "v1",
+          "projection_profile": "metadata",
+          "links": [],
+          "attributes": {
+            "n": 1e1
+          },
+          "evidence": []
+        }
+      ],
+      "next_cursor": "1",
+      "has_more": false,
+      "coverage": {
+        "kind": "event_stream",
+        "limitations": []
+      }
+    },
+    "wire_valid": false
+  },
+  {
+    "name": "negative_zero_wire",
+    "schema": "source-response",
+    "valid": true,
+    "document": {
+      "protocol": "rindcut.source/v1",
+      "source_id": "acme",
+      "source_revision": 1,
+      "source_instance": "acme",
+      "stream": "actions",
+      "generation": "g1",
+      "capability": {
+        "kind": "event_stream",
+        "types": [],
+        "limitations": []
+      },
+      "status": "ok",
+      "records": [
+        {
+          "source_instance": "acme",
+          "generation": "g1",
+          "stream": "actions",
+          "id": "e1",
+          "type": "acme.action",
+          "schema_version": "v1",
+          "adapter_revision": "v1",
+          "projection_profile": "metadata",
+          "links": [],
+          "attributes": {
+            "n": -0
+          },
+          "evidence": []
+        }
+      ],
+      "next_cursor": "1",
+      "has_more": false,
+      "coverage": {
+        "kind": "event_stream",
+        "limitations": []
+      }
+    },
+    "wire_valid": false
+  },
+  {
+    "name": "identifier_unicode_byte_limit",
+    "schema": "source-response",
+    "valid": true,
+    "document": {
+      "protocol": "rindcut.source/v1",
+      "source_id": "acme",
+      "source_revision": 1,
+      "source_instance": "acme",
+      "stream": "actions",
+      "generation": "g1",
+      "capability": {
+        "kind": "event_stream",
+        "types": [],
+        "limitations": []
+      },
+      "status": "ok",
+      "records": [
+        {
+          "source_instance": "acme",
+          "generation": "g1",
+          "stream": "actions",
+          "id": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+          "type": "acme.action",
+          "schema_version": "v1",
+          "adapter_revision": "v1",
+          "projection_profile": "metadata",
+          "links": [],
+          "attributes": {},
+          "evidence": []
+        }
+      ],
+      "next_cursor": "1",
+      "has_more": false,
+      "coverage": {
+        "kind": "event_stream",
+        "limitations": []
+      }
+    },
+    "wire_valid": false
+  },
+  {
+    "name": "identifier_unicode_byte_boundary",
+    "schema": "source-response",
+    "valid": true,
+    "document": {
+      "protocol": "rindcut.source/v1",
+      "source_id": "acme",
+      "source_revision": 1,
+      "source_instance": "acme",
+      "stream": "actions",
+      "generation": "g1",
+      "capability": {
+        "kind": "event_stream",
+        "types": [],
+        "limitations": []
+      },
+      "status": "ok",
+      "records": [
+        {
+          "source_instance": "acme",
+          "generation": "g1",
+          "stream": "actions",
+          "id": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+          "type": "acme.action",
+          "schema_version": "v1",
+          "adapter_revision": "v1",
+          "projection_profile": "metadata",
+          "links": [],
+          "attributes": {},
+          "evidence": []
+        }
+      ],
+      "next_cursor": "1",
+      "has_more": false,
+      "coverage": {
+        "kind": "event_stream",
+        "limitations": []
+      }
+    },
+    "wire_valid": true
+  }
+]
