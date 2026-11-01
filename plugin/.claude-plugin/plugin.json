@@ -1,7 +1,7 @@
 {
   "name": "rindcut",
-  "version": "0.1.1",
-  "description": "Checks that your scheduled AI jobs really ran and really produced what they promised, judged from the real output instead of the agent's word.",
+  "version": "0.2.0",
+  "description": "Checks scheduled AI jobs against their outputs and records observations from connected agent sources.",
   "author": {
     "name": "jeon-jihyeon"
   }

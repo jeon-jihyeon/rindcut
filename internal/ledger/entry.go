@@ -1,4 +1,4 @@
-// Package ledger is the append-only record everything in rindcut is read from
+// Package ledger stores scheduled job history in JSONL
 package ledger
 
 import (

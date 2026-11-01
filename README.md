@@ -1,6 +1,6 @@
 <div align="center">
   <h1>rindcut</h1>
-  <h3>Checks that your scheduled AI jobs really ran and really produced what they promised.</h3>
+  <h3>Checks scheduled AI job outputs and records observations from connected agent sources.</h3>
 </div>
 
 <div align="center">
@@ -14,7 +14,7 @@
 
 A scheduled Claude task shows green. The report it was supposed to write never landed.
 
-A schedule only knows that a run ended. It doesn't know whether the work exists. rindcut cuts the rind and looks inside: for every slot a job was due, it checks the real output, the file, the page or whatever your own script looks at, and records one verdict on your machine.
+A schedule only knows that a run ended. It doesn't know whether the work exists. rindcut cuts the rind and looks inside: for due slots within its seven-day lookback, it checks the real output, the file, the page or whatever your own script looks at, and records one verdict per slot on your machine. Older slots remain unjudged if the checker was off beyond that window.
 
 ## Quickstart
 
@@ -63,9 +63,15 @@ schedule → Claude session → output on disk, a page or anything a script read
 - Job: a name, a schedule with its timezone and grace, and the checks that prove it worked. `file` looks at a path with `{{date}}` for the slot's date, `http` looks for text on a page, and `command` runs a script that exits 0 on success
 - Session match: for a job that runs on this machine, a session counts only when it started in the job's folder, inside the slot's window, with the scheduled prompt's first line. Desktop prompt wrappers, a missing hook or an incorrect marker can prevent matching; `missed` does not prove the job never ran
 - Cloud jobs: a Cowork schedule or a Routine is judged from its output alone, so missed and fail read the same
-- Ledger: `~/.rindcut/ledger.jsonl`, append only. Corrections are new entries. Only sessions in a job's folder are recorded, and only verdicts and corrections leave the machine
+- Ledger: `~/.rindcut/ledger.jsonl`, append only. Corrections are new entries. Only sessions in a job's folder are recorded. Built-in exporters carry scheduled verdicts and corrections. CLI and MCP query results may be forwarded by their host
 
 An optional external critic evaluates registered content criteria after every objective check passes. Its judgment stays separate from the objective verdict and never grants human approval. Critic records stay out of the built-in exporters; explanations are stored and returned in CLI or MCP queries only with the owner's explicit retention choice.
+
+## Connected agent sources
+
+A source reader collects records from an agent that exposes the common contract. A separate observer checks registered evidence and records its result alongside the source claim. Capabilities, coverage and gaps describe what an adapter can see. A claim or an observation never grants human approval.
+
+Ask Claude to register a source and review its executable, arguments, evidence access and retained metadata before confirming. Readers and observers run with your OS privileges and are not sandboxed. Keep credentials and private content out of retained fields. See the [adapter contract](plugin/skills/rindcut/observe-contract.md) for the wire format and limits.
 
 ## Exporters
 
@@ -85,10 +91,13 @@ The plugin is all an owner needs. The CLI is there for scripts and for looking a
 
 | Command | What it does |
 |---|---|
-| `rindcut tick` | judge closed slots and run the exporters, what the schedule calls |
+| `rindcut tick` | judge closed slots, sync sources, run due observations and exporters |
 | `rindcut check JOB` | dry run of a job's latest slot |
 | `rindcut jobs`, `ledger`, `report` | list jobs, ledger entries and the summary. `--json` for machines |
 | `rindcut export` | send new entries to the exporters |
+| `rindcut observe sync` | collect source records and run due observations |
+| `rindcut observe records` | query observation records as JSONL |
+| `rindcut observe status` | show coverage, gaps and unresolved observations |
 | `rindcut install`, `uninstall` | schedule or unschedule the tick |
 | `rindcut status` | version, home and tick state |
 
@@ -100,7 +109,7 @@ The plugin is all an owner needs. The CLI is there for scripts and for looking a
 go install github.com/jeon-jihyeon/rindcut/cmd/rindcut@latest
 ```
 
-The plugin launcher fetches the release that matches its version and checks it against `checksums.txt`. Releases carry build provenance, so `gh attestation verify <archive> --repo jeon-jihyeon/rindcut` shows an archive was built here from its tag.
+The plugin launcher fetches the release that matches its version and checks it against `checksums.txt`. Releases carry build provenance. `gh attestation verify <archive> --repo jeon-jihyeon/rindcut` verifies provenance associated with this repository. Add `--source-ref refs/tags/<version>` to require a specific release tag.
 
 ## License
 

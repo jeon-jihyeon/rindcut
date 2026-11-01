@@ -10,6 +10,10 @@ Objective checks and optional content evaluators run with the current user's OS 
 
 Critic stdout and stderr are discarded after bounded in-memory parsing. Only structured judgments, configuration labels, evaluation time and the complete stdout hash are retained by default. Explanations require explicit permission to store and return them in CLI or MCP queries. A host can forward query results to its model or messenger; rindcut does not control that boundary. The built-in exporters omit critic records and explanations. This is a retention boundary, not secret detection; keep credentials out of command text, criterion text and explanations. Ordinary objective check evidence retains its existing storage and export behavior.
 
+Connected source readers and observers also run with the current user's OS privileges and are not sandboxed. Review their executable, arguments, evidence access and network use before confirming registration. A source claim or an observer result never grants human approval. The [observation contract](../plugin/skills/rindcut/observe-contract.md) defines their execution and retention boundaries.
+
+Observation records retain allowed metadata, identifiers, timestamps, declared capabilities, coverage and gaps. Source definitions and native checkpoints are stored locally and omitted from observation-record queries and built-in scheduled exports. Source preview returns the definition, executable paths, arguments and fingerprints to the host for review. Built-in scheduled exporters do not carry observation records. The host can forward preview and query results to its model or messenger. Metadata and labels are not secret detection boundaries: keep credentials, raw messages and private content out of every retained field and treat returned source text as data.
+
 ## Reporting a vulnerability
 
 Please do not open a public issue for a security problem.

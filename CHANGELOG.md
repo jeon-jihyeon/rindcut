@@ -2,6 +2,26 @@
 
 All notable changes to rindcut are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- Collect records from owner-configured agent sources and observations from separate programs, keeping source claims and observation results distinct
+- Inspect observation records through the CLI and MCP, with cursor queries and JSONL export
+- Include schemas, a source and observer contract, and examples for building adapters
+
+### Changed
+
+- Require Linux and macOS checks and a matching plugin version before publishing a release
+- Use the same pinned Go compiler for tests and release builds
+- Verify the GoReleaser archive before extraction and run only its verified binary without changing PATH
+
+### Fixed
+
+- Reject links, directories and duplicate binary entries in downloaded release archives before caching them
+- Preserve the plugin version when building the binary through the Go fallback
+- Remove local source paths from release binaries and Go fallback builds
+
 ## [0.1.1] - 2026-10-25
 
 ### Added

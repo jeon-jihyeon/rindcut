@@ -1,0 +1,15 @@
+{
+  "events": [
+    {
+      "source_id": "acme",
+      "source_instance": "acme",
+      "generation": "g1",
+      "stream": "actions",
+      "type": "acme.unregistered.terminal",
+      "id": "e1",
+      "action_id": "A1"
+    }
+  ],
+  "observation_results": ["pending", "confirmed", "refuted"],
+  "actor_kind": "code"
+}
