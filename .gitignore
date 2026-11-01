@@ -5,6 +5,8 @@
 *.test
 *.prof
 cover.out
+__pycache__/
+*.py[cod]
 
 # local notes, records and settings
 .claude/settings.local.json
