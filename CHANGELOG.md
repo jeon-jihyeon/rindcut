@@ -2,22 +2,34 @@
 
 All notable changes to rindcut are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## [0.2.0] - 2026-11-02
 
 ### Added
 
+- A metadata-only live nodloop reader using its public MCP records contract
+- Offline A2A Task and run usage source and observer examples with fixed evidence scopes, budget revisions and public contract scenarios
 - Collect records from owner-configured agent sources and observations from separate programs, keeping source claims and observation results distinct
 - Inspect observation records through the CLI and MCP, with cursor queries and JSONL export
 - Include schemas, a source and observer contract, and examples for building adapters
 
 ### Changed
 
+- Start the shared five-minute collector after an approved enabled source save, including source-only setups
+- Report actual scheduler health separately from installed files and preserve saved sources when scheduling fails
+- Expose OTLP partial acceptance warnings and rejected span counts without replaying the accepted batch
+- Use a bounded OTLP HTTP delivery adapter with system TLS trust and registered settings instead of SDK environment overrides
 - Require Linux and macOS checks and a matching plugin version before publishing a release
 - Use the same pinned Go compiler for tests and release builds
 - Verify the GoReleaser archive before extraction and run only its verified binary without changing PATH
 
 ### Fixed
 
+- Keep observation collection running when scheduled judging fails
+- Protect another home's scheduler from replacement and reject nonregular lock files
+- Report closed or malformed MCP test streams without waiting for the response timeout
+- Honor an explicit Claude configuration directory in transcript backfill and installed tick schedules
+- Match CLI help to flag ordering and the evidence scheduled checks actually establish
+- Replay observation series in one batch while preserving immutable state and correction rules
 - Reject links, directories and duplicate binary entries in downloaded release archives before caching them
 - Preserve the plugin version when building the binary through the Go fallback
 - Remove local source paths from release binaries and Go fallback builds
@@ -70,5 +82,6 @@ All notable changes to rindcut are listed here. The format follows [Keep a Chang
 - Command checks that could panic when the process never started
 - A missed slot corrected by the owner now withdraws the nodloop outcome sent for its session
 
+[0.2.0]: https://github.com/jeon-jihyeon/rindcut/releases/tag/v0.2.0
 [0.1.1]: https://github.com/jeon-jihyeon/rindcut/releases/tag/v0.1.1
 [0.1.0]: https://github.com/jeon-jihyeon/rindcut/releases/tag/v0.1.0
