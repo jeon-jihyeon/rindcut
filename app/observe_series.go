@@ -93,6 +93,7 @@ func (s observeState) validateSeries(ctx context.Context, saved observeSeries) e
 	if err != nil {
 		return err
 	}
+	observations := make([]observe.Observation, 0, len(s.observationIDs[saved.ID]))
 	for _, id := range s.observationIDs[saved.ID] {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -102,10 +103,14 @@ func (s observeState) validateSeries(ctx context.Context, saved observeSeries) e
 		if err != nil {
 			return err
 		}
-		replayed, err = replayed.Apply(value)
-		if err != nil {
-			return err
-		}
+		observations = append(observations, value)
+	}
+	replayed, err = replayed.ApplyAll(observations)
+	if err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	switch saved.Status {
 	case "suspended_configuration":

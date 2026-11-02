@@ -108,29 +108,40 @@ func (s Series) Overdue(now time.Time) bool {
 }
 
 func (s Series) Apply(observation Observation) (Series, error) {
-	spec := s.state.Spec
-	if !s.Due(observation.At) || observation.ID == "" || slices.Contains(s.state.Observations, observation.ID) ||
-		!observation.matches(spec) || observation.At.Before(spec.CapturedAt) {
-		return Series{}, errors.New("invalid_observation")
-	}
-	switch observation.Result {
-	case "pending", "unknown", "confirmed", "refuted":
-	default:
-		return Series{}, errors.New("invalid_observation")
-	}
-	if !observation.NextAt.IsZero() && !observation.NextAt.After(observation.At) {
-		return Series{}, errors.New("invalid_observation")
-	}
-	if observation.Supersedes != "" && !slices.Contains(s.state.Observations, observation.Supersedes) {
-		return Series{}, errors.New("invalid_supersedes")
-	}
+	return s.ApplyAll([]Observation{observation})
+}
+
+func (s Series) ApplyAll(observations []Observation) (Series, error) {
 	state := s.Snapshot()
-	state.Status = observation.Result
-	state.LastObservationID = observation.ID
-	state.Observations = append(state.Observations, observation.ID)
-	state.DueAt = observation.At.Add(spec.Interval)
-	if observation.NextAt.After(state.DueAt) {
-		state.DueAt = observation.NextAt
+	seen := make(map[string]bool, len(state.Observations)+len(observations))
+	for _, id := range state.Observations {
+		seen[id] = true
+	}
+	for _, observation := range observations {
+		current := Series{state: state}
+		if !current.Due(observation.At) || observation.ID == "" || seen[observation.ID] ||
+			!observation.matches(state.Spec) || observation.At.Before(state.Spec.CapturedAt) {
+			return Series{}, errors.New("invalid_observation")
+		}
+		switch observation.Result {
+		case "pending", "unknown", "confirmed", "refuted":
+		default:
+			return Series{}, errors.New("invalid_observation")
+		}
+		if !observation.NextAt.IsZero() && !observation.NextAt.After(observation.At) {
+			return Series{}, errors.New("invalid_observation")
+		}
+		if observation.Supersedes != "" && !seen[observation.Supersedes] {
+			return Series{}, errors.New("invalid_supersedes")
+		}
+		state.Status = observation.Result
+		state.LastObservationID = observation.ID
+		state.Observations = append(state.Observations, observation.ID)
+		state.DueAt = observation.At.Add(state.Spec.Interval)
+		if observation.NextAt.After(state.DueAt) {
+			state.DueAt = observation.NextAt
+		}
+		seen[observation.ID] = true
 	}
 	return Series{state: state}, nil
 }
