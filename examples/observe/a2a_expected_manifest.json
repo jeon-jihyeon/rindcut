@@ -1,0 +1,59 @@
+{
+  "scope_ref": "9c67a0f2d30521d8f87d9176ef2d273ded7a73a71ed6ad3c590dbd3ce5fc45c0",
+  "task_ref": "59a136a111ee41917cd7930e8582e92d032871ed3e869d997576c0e9dfb04751",
+  "context_ref": "93bc580dd9c1312ef4affa2370afd709a22908a97fff3771de677c3373f37fba",
+  "artifact_ref": "24cc50129142194636d935eae30e238e05391a19e75a80692d4e22beaaa3cf56",
+  "snapshot_ref": "9fe4be7c2233b4fbee9665f623e21b2dbe4db7661d1cdabb43d5b8de15d3fae6",
+  "snapshot_digest": "sha256:1bda083b5f3f501fb45d82a91fb733631d733b53dd2107f3a991bcc689baff1c",
+  "artifact_digest": "sha256:ed1a545bb85e55816bbf9566b028b2a0bc456b88f49f6f266c0401048824194b",
+  "cases": {
+    "coverage_window_mismatch": [
+      "unknown",
+      "coverage_scope_mismatch"
+    ],
+    "normal": [
+      "confirmed",
+      "criterion_satisfied"
+    ],
+    "required_artifact_missing": [
+      "refuted",
+      "required_artifact_missing"
+    ],
+    "delayed": [
+      "pending",
+      "effect_not_yet_observed"
+    ],
+    "chunk_gap": [
+      "unknown",
+      "chunk_gap"
+    ],
+    "unreadable": [
+      "unknown",
+      "destination_unreadable"
+    ],
+    "cancel_after": [
+      "refuted",
+      "effect_after_cancel_cutoff"
+    ],
+    "cancel_before": [
+      "confirmed",
+      "criterion_satisfied"
+    ],
+    "cancel_unknown": [
+      "unknown",
+      "cancel_order_unknown"
+    ],
+    "duplicate_effect": [
+      "refuted",
+      "duplicate_business_effect"
+    ],
+    "digest_mismatch": [
+      "refuted",
+      "artifact_digest_mismatch"
+    ],
+    "version_unavailable": [
+      "unknown",
+      "artifact_version_unavailable"
+    ]
+  }
+}
