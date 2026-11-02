@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
 	"time"
@@ -53,7 +54,9 @@ type Cursor struct {
 	Pending []string `json:"pending,omitempty"`
 	Dropped int      `json:"dropped,omitempty"`
 	// LastDropped is the latest dropped entry and why, kept after later sends succeed
-	LastDropped string `json:"last_dropped,omitempty"`
+	LastDropped   string `json:"last_dropped,omitempty"`
+	LastWarning   string `json:"last_warning,omitempty"`
+	RejectedSpans int64  `json:"rejected_spans,omitempty"`
 	// LastError is the latest failure of the last run, recomputed on every run
 	LastError string     `json:"last_error,omitempty"`
 	FailedAt  *time.Time `json:"failed_at,omitempty"`
@@ -61,16 +64,19 @@ type Cursor struct {
 
 // Lag is what one exporter still owes and what it gave up on, shown in the daily summary so a broken export isn't silent
 type Lag struct {
-	Exporter    string     `json:"exporter"`
-	Pending     int        `json:"pending"`
-	Dropped     int        `json:"dropped,omitempty"`
-	LastDropped string     `json:"last_dropped,omitempty"`
-	LastError   string     `json:"last_error,omitempty"`
-	FailedAt    *time.Time `json:"failed_at,omitempty"`
+	Exporter      string     `json:"exporter"`
+	Pending       int        `json:"pending"`
+	Dropped       int        `json:"dropped,omitempty"`
+	LastDropped   string     `json:"last_dropped,omitempty"`
+	LastError     string     `json:"last_error,omitempty"`
+	LastWarning   string     `json:"last_warning,omitempty"`
+	RejectedSpans int64      `json:"rejected_spans,omitempty"`
+	FailedAt      *time.Time `json:"failed_at,omitempty"`
 }
 
 func (c Cursor) lag(name string, pending int) Lag {
-	return Lag{Exporter: name, Pending: pending, Dropped: c.Dropped, LastDropped: c.LastDropped, LastError: c.LastError, FailedAt: c.FailedAt}
+	return Lag{Exporter: name, Pending: pending, Dropped: c.Dropped, LastDropped: c.LastDropped,
+		LastWarning: c.LastWarning, RejectedSpans: c.RejectedSpans, LastError: c.LastError, FailedAt: c.FailedAt}
 }
 
 type Runner struct {
@@ -125,15 +131,27 @@ func (r Runner) failed(cur *Cursor, err error) {
 	cur.LastError, cur.FailedAt = err.Error(), &now
 }
 
-// send delivers one batch and moves the cursor past it
-// A permanent refusal or a deferral of a batch is retried entry by entry, so only those entries are dropped or kept pending
+// PermanentError and deferred batches isolate entries so one refusal cannot block later entries
+// OTLP partial acceptance and nonretryable responses settle the whole batch without replay
 func (r Runner) send(ctx context.Context, ex Exporter, batch []ledger.Entry, cur *Cursor) error {
 	err := ex.Export(ctx, batch)
 	var permanent PermanentError
+	var partial partialDelivery
+	var refused refusedDelivery
 	deferred := errors.Is(err, ErrDeferred)
 	switch {
 	case err == nil:
 		cur.Last = batch[len(batch)-1].ID
+		return nil
+	case errors.As(err, &partial):
+		cur.Last = batch[len(batch)-1].ID
+		cur.LastWarning = partial.Error()
+		cur.RejectedSpans += min(partial.rejected, math.MaxInt64-cur.RejectedSpans)
+		return nil
+	case errors.As(err, &refused):
+		cur.Last = batch[len(batch)-1].ID
+		cur.Dropped += len(batch)
+		cur.LastDropped = cur.Last + ": " + refused.Error()
 		return nil
 	case !errors.As(err, &permanent) && !deferred:
 		return err

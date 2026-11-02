@@ -153,12 +153,14 @@ type CriticProblem struct {
 }
 
 type Lag struct {
-	Exporter    string     `json:"exporter"`
-	Pending     int        `json:"pending"`
-	Dropped     int        `json:"dropped,omitempty"`
-	LastDropped string     `json:"last_dropped,omitempty"`
-	LastError   string     `json:"last_error,omitempty"`
-	FailedAt    *time.Time `json:"failed_at,omitempty"`
+	Exporter      string     `json:"exporter"`
+	Pending       int        `json:"pending"`
+	Dropped       int        `json:"dropped,omitempty"`
+	LastDropped   string     `json:"last_dropped,omitempty"`
+	LastError     string     `json:"last_error,omitempty"`
+	LastWarning   string     `json:"last_warning,omitempty"`
+	RejectedSpans int64      `json:"rejected_spans,omitempty"`
+	FailedAt      *time.Time `json:"failed_at,omitempty"`
 }
 
 type OTLPSettings struct {

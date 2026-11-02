@@ -11,7 +11,7 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/sdk/instrumentation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -40,9 +40,11 @@ type OTLPSettings struct {
 }
 
 func NewOTLP(ctx context.Context, s OTLPSettings, names map[string]string, version string) (*OTLP, error) {
-	spans, err := otlptracehttp.New(ctx,
-		otlptracehttp.WithEndpointURL(tracesURL(s.Endpoint)),
-		otlptracehttp.WithHeaders(s.Headers))
+	client, err := newOTLPClient(tracesURL(s.Endpoint), s.Headers)
+	if err != nil {
+		return nil, err
+	}
+	spans, err := otlptrace.New(ctx, client)
 	if err != nil {
 		return nil, fmt.Errorf("otlp exporter: %w", err)
 	}
