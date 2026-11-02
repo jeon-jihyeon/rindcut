@@ -1,0 +1,74 @@
+{
+  "id": "acme-a2a",
+  "enabled": true,
+  "source_instance": "acme-a2a",
+  "stream": "tasks",
+  "capability": {
+    "kind": "snapshot",
+    "types": [
+      "a2a.task.snapshot"
+    ],
+    "limitations": [
+      "immutable_supplied_samples_only",
+      "metadata_only",
+      "no_intermediate_attempts",
+      "no_missing_chunk_reconstruction",
+      "no_protocol_conformance_claim"
+    ]
+  },
+  "adapter_revision": "a2a-example-v1",
+  "projection_profile": "a2a.task.snapshot.v1",
+  "reader": {
+    "program": "python3",
+    "args": [
+      "examples/observe/a2a.py",
+      "reader",
+      "--input",
+      "examples/observe/a2a_snapshots.json"
+    ],
+    "allowed_attributes": [
+      "scope_ref",
+      "wire_version",
+      "context_ref",
+      "task_state",
+      "artifact_state",
+      "chunks_complete"
+    ],
+    "fingerprint_files": [
+      "examples/observe/a2a.py",
+      "examples/observe/adapter.py"
+    ]
+  },
+  "observers": [
+    {
+      "id": "actual_effect",
+      "types": [
+        "a2a.task.snapshot"
+      ],
+      "criterion_id": "a2a.effect",
+      "criterion_revision": "v1",
+      "parameters": {
+        "expected_scope_ref": "9c67a0f2d30521d8f87d9176ef2d273ded7a73a71ed6ad3c590dbd3ce5fc45c0",
+        "expected_state": "ready",
+        "expected_window_start": "2026-01-01T00:00:00Z",
+        "expected_window_end": "2026-01-01T00:10:00Z",
+        "require_artifact": true,
+        "byte_equality": true
+      },
+      "program": "python3",
+      "args": [
+        "examples/observe/a2a.py",
+        "observer",
+        "--input",
+        "examples/observe/a2a_destination.json"
+      ],
+      "fingerprint_files": [
+        "examples/observe/a2a.py",
+        "examples/observe/adapter.py"
+      ],
+      "mode": "watch",
+      "interval_seconds": 1,
+      "deadline_seconds": 60
+    }
+  ]
+}

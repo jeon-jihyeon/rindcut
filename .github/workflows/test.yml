@@ -36,6 +36,8 @@ jobs:
           version: v2.14
       - name: go test
         run: go test -race -coverprofile=cover.out ./...
+      - name: Observation profile tests
+        run: python3 -B -m unittest discover -s examples/observe -p 'test_*.py'
       - name: Coverage summary
         if: runner.os == 'Linux'
         run: |

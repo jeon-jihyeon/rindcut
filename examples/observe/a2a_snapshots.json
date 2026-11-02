@@ -1,0 +1,59 @@
+{
+  "profile": "a2a.task.snapshot.v1",
+  "wire_version": "1.0",
+  "scope": {
+    "server": "acme-server",
+    "tenant": "acme-tenant",
+    "caller": "acme-caller"
+  },
+  "source_instance": "acme-a2a",
+  "generation": "g1",
+  "stream": "tasks",
+  "samples": [
+    {
+      "sample_id": "s1",
+      "sampled_at": "2026-01-01T00:00:00Z",
+      "chunks_complete": true,
+      "task": {
+        "id": "T1",
+        "contextId": "C1",
+        "status": {
+          "state": "TASK_STATE_COMPLETED",
+          "timestamp": "2025-12-31T23:59:59Z"
+        },
+        "artifacts": [
+          {
+            "artifactId": "A1",
+            "parts": [
+              {
+                "text": "private text"
+              },
+              {
+                "url": "https://example.com/private"
+              }
+            ]
+          }
+        ],
+        "history": [
+          {
+            "messageId": "M1",
+            "role": "ROLE_USER",
+            "parts": [
+              {
+                "text": "private prompt"
+              }
+            ]
+          }
+        ],
+        "metadata": {
+          "authorization": "private token"
+        }
+      },
+      "artifact": {
+        "artifact_id": "A1",
+        "version": "v1",
+        "digest": "sha256:ed1a545bb85e55816bbf9566b028b2a0bc456b88f49f6f266c0401048824194b"
+      }
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "profile": "a2a.task.snapshot.v1",
+  "scope": {
+    "server": "acme-server",
+    "tenant": "acme-tenant",
+    "caller": "acme-caller"
+  },
+  "readable": true,
+  "tasks": {
+    "59a136a111ee41917cd7930e8582e92d032871ed3e869d997576c0e9dfb04751": {
+      "task_ref": "59a136a111ee41917cd7930e8582e92d032871ed3e869d997576c0e9dfb04751",
+      "scope_ref": "9c67a0f2d30521d8f87d9176ef2d273ded7a73a71ed6ad3c590dbd3ce5fc45c0",
+      "window_start": "2026-01-01T00:00:00Z",
+      "window_end": "2026-01-01T00:10:00Z",
+      "complete": true,
+      "artifact_state": "present",
+      "effects": [
+        {
+          "id": "effect-1",
+          "state": "ready",
+          "occurred_at": "2026-01-01T00:01:00Z",
+          "idempotency_scope": "order-1"
+        }
+      ]
+    }
+  },
+  "artifacts": {
+    "24cc50129142194636d935eae30e238e05391a19e75a80692d4e22beaaa3cf56": {
+      "ref": {
+        "namespace": "a2a.artifact",
+        "id": "24cc50129142194636d935eae30e238e05391a19e75a80692d4e22beaaa3cf56"
+      },
+      "readable": true,
+      "content_base64": "cmVhZHkK"
+    }
+  }
+}
