@@ -1,0 +1,65 @@
+{
+  "normalized_run": {
+    "input_tokens": 200,
+    "output_tokens": 40,
+    "cached_input_tokens": 120,
+    "reasoning_output_tokens": 16,
+    "tool_calls": 2,
+    "elapsed_ms": 500
+  },
+  "boundary_result": "confirmed",
+  "exceeded_result": "refuted",
+  "missing_dimension_result": "unknown",
+  "preparing_results": [
+    "pending",
+    "confirmed"
+  ],
+  "partial_observer_calls": 0,
+  "final_observer_calls": 1,
+  "event_types": [
+    "acme.run_usage.partial",
+    "acme.run_usage.final"
+  ],
+  "event_ids": [
+    "S-partial",
+    "S-final"
+  ],
+  "selected_snapshot": "S-final",
+  "declaration_authority_promoted": false,
+  "billing_verified": false,
+  "inclusion_results": {
+    "two-disjoint-children": "confirmed",
+    "child-input-sum-contradiction": "unknown",
+    "child-output-sum-contradiction": "unknown",
+    "child-cache-sum-contradiction": "unknown",
+    "child-reasoning-sum-contradiction": "unknown",
+    "child-overlap-unknown": "unknown",
+    "child-inclusive-scope-unknown": "unknown"
+  },
+  "stream_results": {
+    "openai-top-level-api-error": {
+      "result": "unknown",
+      "reason_code": "receipt_incomplete"
+    },
+    "openai-metadata-error": {
+      "result": "confirmed",
+      "reason_code": "within_budget"
+    },
+    "openai-moderation-error": {
+      "result": "confirmed",
+      "reason_code": "within_budget"
+    },
+    "openai-content-error": {
+      "result": "confirmed",
+      "reason_code": "within_budget"
+    },
+    "openai-future-field": {
+      "result": "confirmed",
+      "reason_code": "within_budget"
+    },
+    "openai-empty-error": {
+      "result": "confirmed",
+      "reason_code": "within_budget"
+    }
+  }
+}

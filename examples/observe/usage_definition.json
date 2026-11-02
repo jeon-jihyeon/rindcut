@@ -1,0 +1,83 @@
+{
+  "id": "usage",
+  "enabled": true,
+  "source_instance": "acme",
+  "stream": "usage",
+  "capability": {
+    "kind": "snapshot",
+    "types": [
+      "acme.run_usage.partial",
+      "acme.run_usage.final"
+    ],
+    "limitations": [
+      "supplied_immutable_snapshots_only",
+      "owner_supplied_receipts",
+      "not_billing_verification",
+      "no_unrecorded_consumption"
+    ]
+  },
+  "adapter_revision": "usage-example-v1",
+  "projection_profile": "acme.run_usage.snapshot.v1",
+  "reader": {
+    "program": "python3",
+    "args": [
+      "examples/observe/usage.py",
+      "reader",
+      "--input",
+      "examples/observe/usage_journal.json"
+    ],
+    "allowed_attributes": [
+      "budget_id",
+      "budget_revision",
+      "usage_complete",
+      "provider",
+      "api_version",
+      "model",
+      "meter_profile",
+      "input_tokens",
+      "output_tokens",
+      "tool_calls",
+      "elapsed_ms",
+      "cached_input_tokens",
+      "reasoning_output_tokens"
+    ],
+    "fingerprint_files": [
+      "examples/observe/usage.py",
+      "examples/observe/adapter.py"
+    ]
+  },
+  "observers": [
+    {
+      "id": "budget",
+      "types": [
+        "acme.run_usage.final"
+      ],
+      "criterion_id": "usage_within_budget",
+      "criterion_revision": "C1",
+      "parameters": {
+        "expected_provider": "openai",
+        "expected_api_version": "chat.completions.v1",
+        "expected_model": "acme-model",
+        "expected_meter_profile": "openai.chat.provider.v1",
+        "expected_budget_id": "B1",
+        "expected_budget_revision": "1",
+        "expected_budget_digest": "sha256:ed755b8af4253de15a76f97dc9fa4efb7d2229fc61059089edd945ce03f76551"
+      },
+      "program": "python3",
+      "args": [
+        "examples/observe/usage.py",
+        "observer",
+        "--input",
+        "examples/observe/usage_resolver.json"
+      ],
+      "fingerprint_files": [
+        "examples/observe/usage.py",
+        "examples/observe/adapter.py"
+      ],
+      "mode": "until_terminal",
+      "actor_kind": "code",
+      "interval_seconds": 1,
+      "deadline_seconds": 60
+    }
+  ]
+}

@@ -1,0 +1,684 @@
+{
+  "otel_revision": "dc3571562603552dc555c667dfa327a638d94ab2",
+  "vectors": [
+    {
+      "id": "openai-cached-reasoning",
+      "provider": "openai",
+      "native": {
+        "kind": "openai.chat.completion",
+        "usage": {
+          "prompt_tokens": 100,
+          "completion_tokens": 20,
+          "total_tokens": 120,
+          "prompt_tokens_details": {
+            "cached_tokens": 60
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 8
+          }
+        }
+      },
+      "expected": {
+        "input_tokens": 100,
+        "output_tokens": 20,
+        "cached_input_tokens": 60,
+        "reasoning_output_tokens": 8
+      },
+      "complete": true
+    },
+    {
+      "id": "anthropic-cache-components",
+      "provider": "anthropic",
+      "native": {
+        "kind": "anthropic.message",
+        "usage": {
+          "input_tokens": 10,
+          "cache_creation_input_tokens": 30,
+          "cache_read_input_tokens": 60,
+          "output_tokens": 20
+        }
+      },
+      "expected": {
+        "input_tokens": 100,
+        "output_tokens": 20,
+        "cached_input_tokens": 60
+      },
+      "complete": true
+    },
+    {
+      "id": "openai-final-stream",
+      "provider": "openai",
+      "native": {
+        "kind": "openai.chat.stream",
+        "chunks": [
+          {
+            "choices": [
+              {
+                "index": 0
+              }
+            ],
+            "usage": null
+          },
+          {
+            "choices": [],
+            "usage": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "prompt_tokens_details": {
+                "cached_tokens": 60
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 8
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "input_tokens": 100,
+        "output_tokens": 20,
+        "cached_input_tokens": 60,
+        "reasoning_output_tokens": 8
+      },
+      "complete": true
+    },
+    {
+      "id": "openai-interrupted-stream",
+      "provider": "openai",
+      "native": {
+        "kind": "openai.chat.stream",
+        "chunks": [
+          {
+            "choices": [
+              {
+                "index": 0
+              }
+            ],
+            "usage": null
+          }
+        ]
+      },
+      "expected": {},
+      "complete": false
+    },
+    {
+      "id": "anthropic-cumulative-stream",
+      "provider": "anthropic",
+      "native": {
+        "kind": "anthropic.stream",
+        "events": [
+          {
+            "type": "message_start",
+            "message": {
+              "usage": {
+                "input_tokens": 10,
+                "cache_creation_input_tokens": 30,
+                "cache_read_input_tokens": 60,
+                "output_tokens": 1
+              }
+            }
+          },
+          {
+            "type": "message_delta",
+            "usage": {
+              "output_tokens": 8
+            }
+          },
+          {
+            "type": "message_delta",
+            "usage": {
+              "output_tokens": 20
+            }
+          },
+          {
+            "type": "message_stop"
+          }
+        ]
+      },
+      "expected": {
+        "input_tokens": 100,
+        "output_tokens": 20,
+        "cached_input_tokens": 60
+      },
+      "complete": true
+    },
+    {
+      "id": "anthropic-interrupted-stream",
+      "provider": "anthropic",
+      "native": {
+        "kind": "anthropic.stream",
+        "events": [
+          {
+            "type": "message_start",
+            "message": {
+              "usage": {
+                "input_tokens": 10,
+                "cache_creation_input_tokens": 30,
+                "cache_read_input_tokens": 60,
+                "output_tokens": 1
+              }
+            }
+          },
+          {
+            "type": "message_delta",
+            "usage": {
+              "output_tokens": 8
+            }
+          }
+        ]
+      },
+      "expected": {
+        "input_tokens": 100,
+        "output_tokens": 8,
+        "cached_input_tokens": 60
+      },
+      "complete": false
+    },
+    {
+      "id": "anthropic-missing-cache-dimension",
+      "provider": "anthropic",
+      "native": {
+        "kind": "anthropic.message",
+        "usage": {
+          "input_tokens": 10,
+          "output_tokens": 20
+        }
+      },
+      "expected": {
+        "output_tokens": 20
+      },
+      "complete": false
+    },
+    {
+      "id": "anthropic-stop-without-final-usage",
+      "provider": "anthropic",
+      "native": {
+        "kind": "anthropic.stream",
+        "events": [
+          {
+            "type": "message_start",
+            "message": {
+              "usage": {
+                "input_tokens": 10,
+                "cache_creation_input_tokens": 30,
+                "cache_read_input_tokens": 60,
+                "output_tokens": 1
+              }
+            }
+          },
+          {
+            "type": "message_stop"
+          }
+        ]
+      },
+      "expected": {
+        "input_tokens": 100,
+        "cached_input_tokens": 60,
+        "output_tokens": 1
+      },
+      "complete": false
+    },
+    {
+      "id": "anthropic-stream-error",
+      "provider": "anthropic",
+      "native": {
+        "kind": "anthropic.stream",
+        "events": [
+          {
+            "type": "message_start",
+            "message": {
+              "usage": {
+                "input_tokens": 10,
+                "cache_creation_input_tokens": 30,
+                "cache_read_input_tokens": 60,
+                "output_tokens": 1
+              }
+            }
+          },
+          {
+            "type": "message_delta",
+            "usage": {
+              "output_tokens": 20
+            }
+          },
+          {
+            "type": "error",
+            "error": {
+              "type": "overloaded_error",
+              "message": "private backend error"
+            }
+          },
+          {
+            "type": "message_stop"
+          }
+        ]
+      },
+      "expected": {
+        "input_tokens": 100,
+        "cached_input_tokens": 60,
+        "output_tokens": 20
+      },
+      "complete": false
+    },
+    {
+      "id": "anthropic-final-input-counters",
+      "provider": "anthropic",
+      "native": {
+        "kind": "anthropic.stream",
+        "events": [
+          {
+            "type": "message_start",
+            "message": {
+              "usage": {
+                "input_tokens": 10,
+                "cache_creation_input_tokens": 30,
+                "cache_read_input_tokens": 60,
+                "output_tokens": 1
+              }
+            }
+          },
+          {
+            "type": "message_delta",
+            "usage": {
+              "input_tokens": 20,
+              "cache_creation_input_tokens": 40,
+              "cache_read_input_tokens": 70,
+              "output_tokens": 20
+            }
+          },
+          {
+            "type": "message_stop"
+          }
+        ]
+      },
+      "expected": {
+        "input_tokens": 130,
+        "output_tokens": 20,
+        "cached_input_tokens": 70
+      },
+      "complete": true
+    },
+    {
+      "id": "openai-top-level-api-error",
+      "provider": "openai",
+      "native": {
+        "kind": "openai.chat.stream",
+        "chunks": [
+          {
+            "choices": [
+              {
+                "index": 0
+              }
+            ],
+            "usage": null
+          },
+          {
+            "error": {
+              "message": "stream failed",
+              "type": "server_error",
+              "code": "stream_failed"
+            }
+          },
+          {
+            "choices": [],
+            "usage": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "prompt_tokens_details": {
+                "cached_tokens": 60
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 8
+              }
+            }
+          }
+        ]
+      },
+      "expected": {},
+      "complete": false
+    },
+    {
+      "id": "openai-metadata-error",
+      "provider": "openai",
+      "native": {
+        "kind": "openai.chat.stream",
+        "chunks": [
+          {
+            "choices": [
+              {
+                "index": 0
+              }
+            ],
+            "usage": null,
+            "metadata": {
+              "error": "ordinary chunk metadata"
+            }
+          },
+          {
+            "choices": [],
+            "usage": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "prompt_tokens_details": {
+                "cached_tokens": 60
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 8
+              }
+            }
+          }
+        ],
+        "metadata": {
+          "error": "ordinary metadata"
+        }
+      },
+      "expected": {
+        "input_tokens": 100,
+        "output_tokens": 20,
+        "cached_input_tokens": 60,
+        "reasoning_output_tokens": 8
+      },
+      "complete": true
+    },
+    {
+      "id": "openai-moderation-error",
+      "provider": "openai",
+      "native": {
+        "kind": "openai.chat.stream",
+        "chunks": [
+          {
+            "choices": [
+              {
+                "index": 0
+              }
+            ],
+            "usage": null,
+            "moderation": {
+              "error": {
+                "code": "metadata_only",
+                "message": "ordinary nested data"
+              }
+            }
+          },
+          {
+            "choices": [],
+            "usage": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "prompt_tokens_details": {
+                "cached_tokens": 60
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 8
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "input_tokens": 100,
+        "output_tokens": 20,
+        "cached_input_tokens": 60,
+        "reasoning_output_tokens": 8
+      },
+      "complete": true
+    },
+    {
+      "id": "openai-content-error",
+      "provider": "openai",
+      "native": {
+        "kind": "openai.chat.stream",
+        "chunks": [
+          {
+            "choices": [
+              {
+                "index": 0,
+                "delta": {
+                  "content": "The word error is ordinary output.",
+                  "error": "ordinary nested data"
+                }
+              }
+            ],
+            "usage": null
+          },
+          {
+            "choices": [],
+            "usage": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "prompt_tokens_details": {
+                "cached_tokens": 60
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 8
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "input_tokens": 100,
+        "output_tokens": 20,
+        "cached_input_tokens": 60,
+        "reasoning_output_tokens": 8
+      },
+      "complete": true
+    },
+    {
+      "id": "openai-future-field",
+      "provider": "openai",
+      "native": {
+        "kind": "openai.chat.stream",
+        "chunks": [
+          {
+            "choices": [
+              {
+                "index": 0
+              }
+            ],
+            "usage": null,
+            "future_extension": {
+              "error": {
+                "message": "ordinary future data"
+              }
+            }
+          },
+          {
+            "choices": [],
+            "usage": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "prompt_tokens_details": {
+                "cached_tokens": 60
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 8
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "input_tokens": 100,
+        "output_tokens": 20,
+        "cached_input_tokens": 60,
+        "reasoning_output_tokens": 8
+      },
+      "complete": true
+    },
+    {
+      "id": "openai-empty-error",
+      "provider": "openai",
+      "native": {
+        "kind": "openai.chat.stream",
+        "chunks": [
+          {
+            "choices": [
+              {
+                "index": 0
+              }
+            ],
+            "usage": null,
+            "error": {}
+          },
+          {
+            "choices": [],
+            "usage": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "prompt_tokens_details": {
+                "cached_tokens": 60
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 8
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "input_tokens": 100,
+        "output_tokens": 20,
+        "cached_input_tokens": 60,
+        "reasoning_output_tokens": 8
+      },
+      "complete": true
+    }
+  ],
+  "inclusion_vectors": [
+    {
+      "id": "two-disjoint-children",
+      "children": [
+        {
+          "request_ref": "Q-child-1",
+          "input_tokens": 30,
+          "output_tokens": 5,
+          "cached_input_tokens": 10,
+          "reasoning_output_tokens": 2
+        },
+        {
+          "request_ref": "Q-child-2",
+          "input_tokens": 30,
+          "output_tokens": 5,
+          "cached_input_tokens": 10,
+          "reasoning_output_tokens": 2
+        }
+      ]
+    },
+    {
+      "id": "child-input-sum-contradiction",
+      "children": [
+        {
+          "request_ref": "Q-child-1",
+          "input_tokens": 60,
+          "output_tokens": 5,
+          "cached_input_tokens": 20,
+          "reasoning_output_tokens": 2
+        },
+        {
+          "request_ref": "Q-child-2",
+          "input_tokens": 60,
+          "output_tokens": 5,
+          "cached_input_tokens": 20,
+          "reasoning_output_tokens": 2
+        }
+      ]
+    },
+    {
+      "id": "child-output-sum-contradiction",
+      "children": [
+        {
+          "request_ref": "Q-child-1",
+          "input_tokens": 30,
+          "output_tokens": 15,
+          "cached_input_tokens": 10,
+          "reasoning_output_tokens": 2
+        },
+        {
+          "request_ref": "Q-child-2",
+          "input_tokens": 30,
+          "output_tokens": 15,
+          "cached_input_tokens": 10,
+          "reasoning_output_tokens": 2
+        }
+      ]
+    },
+    {
+      "id": "child-cache-sum-contradiction",
+      "children": [
+        {
+          "request_ref": "Q-child-1",
+          "input_tokens": 50,
+          "output_tokens": 5,
+          "cached_input_tokens": 40,
+          "reasoning_output_tokens": 2
+        },
+        {
+          "request_ref": "Q-child-2",
+          "input_tokens": 50,
+          "output_tokens": 5,
+          "cached_input_tokens": 40,
+          "reasoning_output_tokens": 2
+        }
+      ]
+    },
+    {
+      "id": "child-reasoning-sum-contradiction",
+      "children": [
+        {
+          "request_ref": "Q-child-1",
+          "input_tokens": 30,
+          "output_tokens": 10,
+          "cached_input_tokens": 10,
+          "reasoning_output_tokens": 6
+        },
+        {
+          "request_ref": "Q-child-2",
+          "input_tokens": 30,
+          "output_tokens": 10,
+          "cached_input_tokens": 10,
+          "reasoning_output_tokens": 6
+        }
+      ]
+    },
+    {
+      "id": "child-overlap-unknown",
+      "children": [
+        {
+          "request_ref": "Q-child",
+          "input_tokens": 30,
+          "output_tokens": 5,
+          "cached_input_tokens": 10,
+          "reasoning_output_tokens": 2
+        },
+        {
+          "request_ref": "Q-child",
+          "input_tokens": 30,
+          "output_tokens": 5,
+          "cached_input_tokens": 10,
+          "reasoning_output_tokens": 2
+        }
+      ]
+    },
+    {
+      "id": "child-inclusive-scope-unknown",
+      "children": [
+        {
+          "request_ref": "Q-child-1",
+          "input_tokens": 30,
+          "output_tokens": 5,
+          "cached_input_tokens": 10,
+          "reasoning_output_tokens": 2,
+          "usage_scope": "inclusive"
+        },
+        {
+          "request_ref": "Q-child-2",
+          "input_tokens": 30,
+          "output_tokens": 5,
+          "cached_input_tokens": 10,
+          "reasoning_output_tokens": 2
+        }
+      ]
+    }
+  ]
+}

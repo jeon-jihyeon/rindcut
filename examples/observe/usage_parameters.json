@@ -1,0 +1,9 @@
+{
+  "expected_provider": "openai",
+  "expected_api_version": "chat.completions.v1",
+  "expected_model": "acme-model",
+  "expected_meter_profile": "openai.chat.provider.v1",
+  "expected_budget_id": "B1",
+  "expected_budget_revision": "1",
+  "expected_budget_digest": "sha256:ed755b8af4253de15a76f97dc9fa4efb7d2229fc61059089edd945ce03f76551"
+}
