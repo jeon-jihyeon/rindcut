@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -187,10 +188,12 @@ type Settings struct {
 }
 
 type Scheduler struct {
-	Binary   string
-	Home     string
-	UserHome string
-	GOOS     string
-	UID      int
-	Exec     func(string, ...string) error
+	Binary          string
+	Home            string
+	UserHome        string
+	ClaudeConfigDir string
+	GOOS            string
+	UID             int
+	Name            string
+	Run             func(context.Context, string, ...string) ([]byte, error)
 }

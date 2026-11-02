@@ -105,8 +105,9 @@ func status(c call) error {
 	if st.LastTick != nil {
 		last = st.LastTick.Format(time.RFC3339)
 	}
-	t := output.Table{Header: []string{"VERSION", "HOME", "TICK SCHEDULED", "LAST TICK", "JOBS"}}
-	t.Rows = append(t.Rows, []string{st.Version, st.Home, strconv.FormatBool(st.TickInstalled), last, strconv.Itoa(st.Jobs)})
+	t := output.Table{Header: []string{"VERSION", "HOME", "TICK SCHEDULED", "SCHEDULE STATE", "SCHEDULE REASON", "LAST TICK", "JOBS"}}
+	t.Rows = append(t.Rows, []string{st.Version, st.Home, strconv.FormatBool(st.TickInstalled), st.Schedule.State,
+		st.Schedule.Reason, last, strconv.Itoa(st.Jobs)})
 	return c.show(st, t)
 }
 

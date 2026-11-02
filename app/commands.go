@@ -1,8 +1,10 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -23,18 +25,38 @@ func New(getenv func(string) string, now func() time.Time, version string, warn 
 		return App{}, err
 	}
 	user := getenv("HOME")
+	config := getenv("CLAUDE_CONFIG_DIR")
+	if config != "" {
+		config, err = filepath.Abs(config)
+		if err != nil {
+			return App{}, fmt.Errorf("resolve CLAUDE_CONFIG_DIR: %w", err)
+		}
+	}
 	a := App{Home: string(h), UserHome: user, Now: now, Version: version, Warn: warn, SearchPath: getenv("PATH"),
-		Installer: Scheduler{Binary: stableBinary(h), Home: string(h), UserHome: user, GOOS: runtime.GOOS,
-			UID: os.Getuid(), Exec: runScheduler}}
+		ClaudeConfigDir: config,
+		Installer: Scheduler{Binary: stableBinary(h), Home: string(h), UserHome: user, ClaudeConfigDir: config, GOOS: runtime.GOOS,
+			UID: os.Getuid(), Run: runSchedulerQuery}}
 	return a, nil
 }
 
-func runScheduler(name string, args ...string) error {
-	out, err := exec.Command(name, args...).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("%s: %w: %s", name, err, out)
+type scheduleOutput struct {
+	bytes.Buffer
+}
+
+func (b *scheduleOutput) Write(p []byte) (int, error) {
+	if b.Len()+len(p) > 1<<20 {
+		return 0, errors.New("schedule_output_limit")
 	}
-	return nil
+	return b.Buffer.Write(p)
+}
+
+func runSchedulerQuery(ctx context.Context, name string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	var output scheduleOutput
+	cmd.Stdout, cmd.Stderr = &output, io.Discard
+	cmd.WaitDelay = time.Second
+	err := cmd.Run()
+	return output.Bytes(), err
 }
 
 func stableBinary(h home.Dir) string {
@@ -57,7 +79,16 @@ func (a App) homePath(parts ...string) string {
 func (a App) lockPath(name string) string { return a.homePath(name + ".lock") }
 func (a App) scheduler() judge.Installer  { return judge.Installer(a.Installer) }
 
-func (a App) Install(context.Context) error   { return a.scheduler().Install() }
+func (a App) ensureSchedule(ctx context.Context) (ScheduleStatus, error) {
+	status, err := a.scheduler().Ensure(ctx)
+	return ScheduleStatus{State: status.State, Reason: status.Reason, Changed: status.Changed}, err
+}
+
+func (a App) Install(ctx context.Context) error {
+	_, err := a.ensureSchedule(ctx)
+	return err
+}
+
 func (a App) Uninstall(context.Context) error { return a.scheduler().Uninstall() }
 
 func (a App) Check(ctx context.Context, id string, at time.Time) (Judgment, error) {

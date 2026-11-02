@@ -14,9 +14,9 @@ type sourceListInput struct {
 }
 
 func addObserve(srv *sdk.Server, a app.App) {
-	addInput(srv, "source_preview", "Preview a common-contract source without running its reader or observers. Show the owner the definition, resolved programs, fingerprints and recovery effects. Programs run with your OS privileges after approval. Registration grants no human approval authority. Adapter semantics are in the bundled rindcut skill's observe-contract.md."+dataNote,
+	addInput(srv, "source_preview", "Preview a common-contract source without running its reader or observers. Show the owner the definition, resolved programs, fingerprints, recovery effects and tick schedule target. Enabled sources ensure a shared five-minute tick after approval. Programs run with your OS privileges. Registration grants no human approval authority. Adapter semantics are in the bundled rindcut skill's observe-contract.md."+dataNote,
 		sourceInputSchema(false), a.SourcePreview)
-	addInput(srv, "source_save", "Save exactly the source definition and recovery choice the owner previewed and confirmed. Reject a stale digest before running any program. An approved reset runs the reader once to verify the expected generation before saving. A changed definition or executable needs a fresh preview. This does not install a schedule or rerun the producer action.",
+	addInput(srv, "source_save", "Save exactly the source definition, recovery choice and tick target the owner previewed and confirmed. Reject a stale digest before running any program. An approved reset runs the reader once to verify its generation. After saving an enabled source, ensure the shared five-minute schedule without waiting for its first tick. Read schedule.state and schedule.reason separately: scheduling failure leaves the source saved. Retry install without saving another revision. A changed definition, executable or tick target needs a fresh preview. No producer action is rerun.",
 		sourceInputSchema(true), a.SourceSave)
 	add(srv, "source_list", "List registered source metadata without commands, credentials or native cursors."+dataNote,
 		func(ctx context.Context, in sourceListInput) (listResult[app.SourceSummary], error) {

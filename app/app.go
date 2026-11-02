@@ -33,12 +33,12 @@ var (
 )
 
 type App struct {
-	Home     string
-	UserHome string
-	Now      func() time.Time
-	Version  string
-	// Schedule installation starts with the first saved job
-	Installer Scheduler
+	Home            string
+	UserHome        string
+	ClaudeConfigDir string
+	Now             func() time.Time
+	Version         string
+	Installer       Scheduler
 	// Unreadable ledger lines remain visible to the owner
 	Warn io.Writer
 	// SearchPath is the PATH to find nodloop in
@@ -52,7 +52,8 @@ func (a App) ledger() *ledger.Ledger {
 }
 
 func (a App) judge() judge.Judge {
-	return judge.Judge{Ledger: a.ledger(), Now: a.Now, UserHome: a.UserHome, Dir: string(a.Home)}
+	return judge.Judge{Ledger: a.ledger(), Now: a.Now, UserHome: a.UserHome,
+		ClaudeConfigDir: a.ClaudeConfigDir, Dir: string(a.Home)}
 }
 
 func (a App) settingsPath() string { return a.homePath("exporters.json") }
@@ -164,12 +165,11 @@ func (a App) Save(ctx context.Context, in Job) (Saved, error) {
 		return Saved{}, err
 	}
 	out := Saved{Job: jobView(j)}
-	if !a.scheduler().Installed() {
-		if err := a.scheduler().Install(); err != nil {
-			return out, fmt.Errorf("job saved, but the tick couldn't be scheduled, the next save tries again: %w", err)
-		}
-		out.Installed = true
+	status, err := a.ensureSchedule(ctx)
+	if err != nil {
+		return out, fmt.Errorf("job saved, but the tick couldn't be scheduled: %w", err)
 	}
+	out.Installed = status.Changed
 	return out, nil
 }
 
@@ -276,19 +276,16 @@ func (a App) Tick(ctx context.Context) (TickResult, error) {
 		return TickResult{}, err
 	}
 	defer unlock()
-	r, err := a.judge().Tick(ctx)
-	if err != nil {
-		return TickResult{}, err
-	}
+	r, judgeErr := a.judge().Tick(ctx)
 	// Status must distinguish a quiet tick from a stopped one
-	_ = os.WriteFile(a.homePath("last-tick"), []byte(a.Now().UTC().Format(time.RFC3339)), 0o600)
+	heartbeatErr := os.WriteFile(a.homePath("last-tick"), []byte(a.Now().UTC().Format(time.RFC3339)), 0o600)
 	observed, observeErr := a.observeSync(ctx)
 	lags, exportErr := a.export(ctx, "")
 	out := TickResult{Verdicts: entriesView(r.Verdicts), Backfilled: r.Backfilled, Lag: lagViews(lags)}
 	if observed.ID != "" {
 		out.Observation = &observed
 	}
-	return out, errors.Join(observeErr, exportErr)
+	return out, errors.Join(judgeErr, heartbeatErr, observeErr, exportErr)
 }
 
 // Export retries eligible scheduled records under the tick lock

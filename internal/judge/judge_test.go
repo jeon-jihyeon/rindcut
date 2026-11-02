@@ -3,7 +3,6 @@ package judge_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -314,7 +313,6 @@ func TestProbe(t *testing.T) {
 
 func TestInstall(t *testing.T) {
 	t.Parallel()
-	refuse := errors.New("refused")
 	type want struct {
 		failed    bool
 		installed bool
@@ -335,21 +333,13 @@ func TestInstall(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			var ran []string
-			in := judge.Installer{
-				Binary: "/home/ann/.rindcut/bin/rindcut", Home: "/home/ann/.rindcut",
-				UserHome: t.TempDir(), GOOS: tc.goos, UID: 501,
-				Exec: func(name string, args ...string) error {
-					ran = append(ran, name+" "+strings.Join(args, " "))
-					if tc.failOn != "" && len(args) > 1 && (args[0] == tc.failOn || args[1] == tc.failOn) {
-						return refuse
-					}
-					return nil
-				}}
+			f := newScheduleFixture(t, tc.goos)
+			f.failOn = tc.failOn
+			in := f.in
 			err := in.Install()
 			last := ""
-			if len(ran) > 0 {
-				last = ran[len(ran)-1]
+			if len(f.actions) > 0 {
+				last = f.actions[len(f.actions)-1]
 			}
 			assert.Equal(t, tc.want, want{failed: err != nil, installed: in.Installed(), last: strings.Split(last, " /")[0]})
 		})
@@ -359,8 +349,7 @@ func TestInstall(t *testing.T) {
 func TestScheduleFiles(t *testing.T) {
 	t.Parallel()
 	in := judge.Installer{
-		Binary: "/home/ann/.rindcut/bin/rindcut", Home: "/home/ann/.rindcut", UserHome: t.TempDir(), UID: 501,
-		Exec: func(string, ...string) error { return nil }}
+		Binary: "/home/ann/.rindcut/bin/rindcut", Home: "/home/ann/.rindcut", UserHome: t.TempDir(), UID: 501}
 	plist := string(in.Plist())
 	for _, want := range []string{
 		"<string>/home/ann/.rindcut/bin/rindcut</string><string>tick</string>",
@@ -372,10 +361,47 @@ func TestScheduleFiles(t *testing.T) {
 	assert.Contains(t, string(service), `Environment="RINDCUT_HOME=/home/ann/.rindcut"`)
 	assert.Contains(t, string(timer), "Persistent=true")
 
-	in.GOOS = "linux"
-	require.NoError(t, in.Install())
-	require.NoError(t, in.Uninstall())
-	assert.False(t, in.Installed())
+	f := newScheduleFixture(t, "linux")
+	require.NoError(t, f.in.Install())
+	require.NoError(t, f.in.Uninstall())
+	assert.False(t, f.in.Installed())
+}
+
+func TestScheduleClaudeConfigDir(t *testing.T) {
+	t.Parallel()
+	type want struct {
+		plist, service string
+		configured     bool
+	}
+	tcs := []struct {
+		name, config string
+		want         want
+	}{
+		{name: "default"},
+		{name: "override", config: "/home/ann/claude alt", want: want{
+			configured: true,
+			plist:      "<key>CLAUDE_CONFIG_DIR</key><string>/home/ann/claude alt</string>",
+			service:    `Environment="CLAUDE_CONFIG_DIR=/home/ann/claude alt"`,
+		}},
+		{name: "escaped override", config: "/home/ann/claude & \"work%\"", want: want{
+			configured: true,
+			plist:      "<key>CLAUDE_CONFIG_DIR</key><string>/home/ann/claude &amp; &#34;work%&#34;</string>",
+			service:    `Environment="CLAUDE_CONFIG_DIR=/home/ann/claude & \"work%%\""`,
+		}},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			in := judge.Installer{Binary: "/bin/rindcut", Home: "/home/ann/.rindcut", UserHome: "/home/ann",
+				ClaudeConfigDir: tc.config}
+			plist := string(in.Plist())
+			service, _ := in.Units()
+			assert.Equal(t, tc.want.configured, strings.Contains(plist, "CLAUDE_CONFIG_DIR"))
+			assert.Equal(t, tc.want.configured, strings.Contains(string(service), "CLAUDE_CONFIG_DIR"))
+			assert.Contains(t, plist, tc.want.plist)
+			assert.Contains(t, string(service), tc.want.service)
+		})
+	}
 }
 
 func TestScheduled(t *testing.T) {

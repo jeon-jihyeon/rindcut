@@ -284,11 +284,12 @@ func (a App) RecordSession(ctx context.Context, in Session) (bool, error) {
 }
 
 type Status struct {
-	Version       string     `json:"version"`
-	Home          string     `json:"home"`
-	TickInstalled bool       `json:"tick_installed"`
-	LastTick      *time.Time `json:"last_tick,omitempty"`
-	Jobs          int        `json:"jobs"`
+	Version       string         `json:"version"`
+	Home          string         `json:"home"`
+	TickInstalled bool           `json:"tick_installed"`
+	LastTick      *time.Time     `json:"last_tick,omitempty"`
+	Jobs          int            `json:"jobs"`
+	Schedule      ScheduleStatus `json:"schedule"`
 }
 
 func (a App) Status(ctx context.Context) (Status, error) {
@@ -297,6 +298,8 @@ func (a App) Status(ctx context.Context) (Status, error) {
 		return Status{}, err
 	}
 	st := Status{Version: a.Version, Home: string(a.Home), TickInstalled: a.scheduler().Installed()}
+	schedule := a.scheduler().Inspect(ctx)
+	st.Schedule = ScheduleStatus{State: schedule.State, Reason: schedule.Reason}
 	for _, j := range job.Current(revisions(entries)) {
 		if !j.Removed {
 			st.Jobs++

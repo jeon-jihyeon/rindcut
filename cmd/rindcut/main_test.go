@@ -16,6 +16,7 @@ import (
 	"github.com/jeon-jihyeon/rindcut/internal/check"
 	"github.com/jeon-jihyeon/rindcut/internal/job"
 	"github.com/jeon-jihyeon/rindcut/internal/ledger"
+	"github.com/jeon-jihyeon/rindcut/internal/lock"
 )
 
 // main can't be imported, so the CLI is tested through run inside its package
@@ -59,6 +60,16 @@ func TestExitCodes(t *testing.T) {
 		{name: "no command", args: nil, want: want{code: 2, stderr: "usage:"}},
 		{name: "unknown command", args: []string{"nope"}, want: want{code: 2, stderr: "unknown command"}},
 		{name: "extra argument", args: []string{"check", "a", "b"}, want: want{code: 2, stderr: "want 1 argument"}},
+		{name: "flag after job", args: []string{"check", "price", "--at", "2026-10-08T09:00:00Z"},
+			want: want{code: 2, stderr: "want 1 argument"}},
+		{name: "unknown flag", args: []string{"jobs", "--nope"},
+			want: want{code: 1, stderr: "flag provided but not defined"}},
+		{name: "missing flag value", args: []string{"check", "--at"},
+			want: want{code: 1, stderr: "flag needs an argument"}},
+		{name: "invalid flag value", args: []string{"ledger", "--limit", "many"},
+			want: want{code: 1, stderr: "invalid value"}},
+		{name: "invalid slot time", args: []string{"check", "--at", "later", "price"},
+			want: want{code: 1, stderr: "parsing time"}},
 		{name: "json error", args: []string{"--json", "check", "nope"}, want: want{code: 1, stdout: `"error": "nope: no such job"`}},
 		{name: "status table", args: []string{"status"}, want: want{code: 0, stdout: "TICK SCHEDULED"}},
 	}
@@ -71,6 +82,18 @@ func TestExitCodes(t *testing.T) {
 			assert.Contains(t, r.stderr, tc.want.stderr)
 		})
 	}
+}
+
+func TestHelp(t *testing.T) {
+	t.Parallel()
+	r := cli(t, newHome(t), "", "help")
+	assert.Equal(t, 2, r.code)
+	assert.Empty(t, r.stdout)
+	assert.Contains(t, r.stderr, "checks scheduled job outputs and records observations")
+	assert.Contains(t, r.stderr, "check [--at T] JOB")
+	assert.Contains(t, r.stderr, "sync observations")
+	assert.Contains(t, r.stderr, "Flags come before positional arguments")
+	assert.NotContains(t, r.stderr, "really ran")
 }
 
 func TestVersionCreatesNoHome(t *testing.T) {
@@ -166,6 +189,25 @@ func TestHookNeverFails(t *testing.T) {
 	}
 }
 
+func TestHookBusyLedger(t *testing.T) {
+	t.Parallel()
+	h, folder := newHome(t), t.TempDir()
+	seed(t, h, folder)
+	release, err := lock.Acquire(context.Background(), filepath.Join(h, "ledger.lock"), 0)
+	require.NoError(t, err)
+	t.Cleanup(release)
+	in, err := json.Marshal(map[string]string{"session_id": "busy-session", "cwd": folder})
+	require.NoError(t, err)
+	start := time.Now()
+	r := cli(t, h, string(in), "hook", "session-end")
+	assert.GreaterOrEqual(t, time.Since(start), 500*time.Millisecond)
+	assert.Equal(t, 0, r.code)
+	assert.Empty(t, r.stdout)
+	assert.Contains(t, r.stderr, "rindcut hook:")
+	assert.Contains(t, r.stderr, lock.ErrBusy.Error())
+	assert.Empty(t, cli(t, h, "", "ledger", "--kind", "session").stdout)
+}
+
 func TestHookRunID(t *testing.T) {
 	t.Parallel()
 	tcs := []struct {
@@ -236,6 +278,58 @@ func TestTickReportExport(t *testing.T) {
 		res := cli(t, h, "", tc.args...)
 		assert.Equal(t, 0, res.code, tc.name+": "+res.stderr)
 		assert.Contains(t, res.stdout, tc.want, tc.name)
+	}
+}
+
+func TestTickClaudeConfigDir(t *testing.T) {
+	t.Parallel()
+	tcs := []struct {
+		name   string
+		config string
+		want   string
+	}{
+		{name: "default", want: "default-session"},
+		{name: "override", config: "claude alt", want: "configured-session"},
+		{name: "literal pattern characters", config: "claude [work]", want: "configured-session"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			user, folder := t.TempDir(), t.TempDir()
+			h := filepath.Join(user, ".rindcut")
+			seed(t, h, folder)
+			config := filepath.Join(user, tc.config)
+			for _, p := range []struct{ dir, id string }{
+				{dir: filepath.Join(user, ".claude"), id: "default-session"},
+				{dir: config, id: "configured-session"},
+			} {
+				path := filepath.Join(p.dir, "projects", "-work", p.id+".jsonl")
+				require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+				data, err := json.Marshal(map[string]any{
+					"type": "user", "sessionId": p.id, "cwd": folder, "timestamp": "2026-10-08T09:01:00Z",
+					"message": map[string]string{"role": "user", "content": "오늘 가격 수집해줘"},
+				})
+				require.NoError(t, err)
+				require.NoError(t, os.WriteFile(path, append(data, '\n'), 0o600))
+			}
+			vars := map[string]string{"HOME": user, "RINDCUT_HOME": h, "PATH": "/usr/bin:/bin"}
+			if tc.config != "" {
+				vars["CLAUDE_CONFIG_DIR"] = config
+			}
+			var out, errOut bytes.Buffer
+			code := run([]string{"tick"}, env{
+				getenv: func(k string) string { return vars[k] }, now: func() time.Time { return now },
+				stdin: strings.NewReader(""), stdout: &out, stderr: &errOut,
+			})
+			require.Equal(t, 0, code, errOut.String())
+			r := cli(t, h, "", "ledger", "--kind", "verdict")
+			require.Equal(t, 0, r.code, r.stderr)
+			var e ledger.Entry
+			require.NoError(t, json.Unmarshal([]byte(r.stdout), &e))
+			var j ledger.Judgment
+			require.NoError(t, e.Decode(&j))
+			assert.Equal(t, []string{tc.want}, j.Sessions)
+		})
 	}
 }
 

@@ -31,6 +31,7 @@ func (a App) SourcePreview(ctx context.Context, in SourceRequest) (SourcePreview
 	if err = applyObserveRecovery(&plan, in, state); err != nil {
 		return SourcePreview{}, err
 	}
+	a.sourceSchedulePlan(&plan)
 	plan.preview.PreviewDigest = observePlanDigest(plan, state)
 	return plan.preview, nil
 }
@@ -40,10 +41,21 @@ func observePlanDigest(plan observeSourcePlan, state observeState) string {
 		Source     observeSource
 		Checkpoint observeCheckpoint
 		Recovery   *SourceRecovery
+		Schedule   *SchedulePlan
 		StoreID    string
 		Offset     int64
 	}{
-		plan.source, plan.checkpoint, plan.preview.Recovery, state.snapshot.StoreID, state.snapshot.CommittedOffset})
+		plan.source, plan.checkpoint, plan.preview.Recovery, plan.preview.Schedule, state.snapshot.StoreID, state.snapshot.CommittedOffset})
+}
+
+func (a App) sourceSchedulePlan(plan *observeSourcePlan) {
+	if !plan.source.Definition.Enabled {
+		return
+	}
+	s := a.Installer
+	plan.preview.Schedule = &SchedulePlan{OS: s.GOOS, UID: s.UID, Program: s.Binary, Home: s.Home, UserHome: s.UserHome,
+		ClaudeConfigDir: s.ClaudeConfigDir, Name: s.Name, IntervalSeconds: 300, Effect: "ensure"}
+	plan.preview.Effects = append(plan.preview.Effects, "tick_schedule_ensure")
 }
 
 func previewObserveRecovery(ctx context.Context, store *obsstore.Store, in SourceRequest) (SourcePreview, error) {
@@ -82,7 +94,22 @@ func (a App) SourceSave(ctx context.Context, in SourceRequest) (SourceSaved, err
 	if err != nil {
 		return SourceSaved{}, errors.New(observeCode(err))
 	}
-	defer unlock()
+	out, err := a.saveObserveSource(ctx, store, in)
+	unlock()
+	if err != nil {
+		return out, err
+	}
+	if out.Source != nil && out.Source.Enabled {
+		status, scheduleErr := a.ensureSchedule(ctx)
+		if scheduleErr != nil && status.Reason == "" {
+			status.Reason = "schedule_failed"
+		}
+		out.Schedule = &status
+	}
+	return out, nil
+}
+
+func (a App) saveObserveSource(ctx context.Context, store *obsstore.Store, in SourceRequest) (SourceSaved, error) {
 	if in.Operation == "recover_store" {
 		return saveObserveRecovery(ctx, store, in)
 	}
@@ -104,6 +131,7 @@ func (a App) SourceSave(ctx context.Context, in SourceRequest) (SourceSaved, err
 	if err = applyObserveRecovery(&plan, in, state); err != nil {
 		return SourceSaved{}, err
 	}
+	a.sourceSchedulePlan(&plan)
 	if err = validateObserveSave(ctx, &plan, state, in.PreviewDigest); err != nil {
 		return SourceSaved{}, err
 	}

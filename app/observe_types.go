@@ -34,6 +34,25 @@ type SourcePreview struct {
 	Recovery           *SourceRecovery   `json:"recovery,omitempty"`
 	StoreRecovery      *StoreRecovery    `json:"store_recovery,omitempty"`
 	Executions         []SourceExecution `json:"executions,omitempty"`
+	Schedule           *SchedulePlan     `json:"schedule,omitempty"`
+}
+
+type SchedulePlan struct {
+	OS              string `json:"os"`
+	UID             int    `json:"uid"`
+	Program         string `json:"program"`
+	Home            string `json:"home"`
+	UserHome        string `json:"user_home"`
+	ClaudeConfigDir string `json:"claude_config_dir,omitempty"`
+	Name            string `json:"name,omitempty"`
+	IntervalSeconds int    `json:"interval_seconds"`
+	Effect          string `json:"effect"`
+}
+
+type ScheduleStatus struct {
+	State   string `json:"state"`
+	Reason  string `json:"reason,omitempty"`
+	Changed bool   `json:"changed,omitempty"`
 }
 
 type SourceExecution struct {
@@ -58,8 +77,9 @@ type StoreRecovery struct {
 }
 
 type SourceSaved struct {
-	Source   *SourceSummary `json:"source,omitempty"`
-	Recovery *StoreRecovery `json:"recovery,omitempty"`
+	Source   *SourceSummary  `json:"source,omitempty"`
+	Recovery *StoreRecovery  `json:"recovery,omitempty"`
+	Schedule *ScheduleStatus `json:"schedule,omitempty"`
 }
 
 type SourceRemoveRequest struct {
