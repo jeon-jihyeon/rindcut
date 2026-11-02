@@ -201,8 +201,10 @@ func report(c call) error {
 			g.Overdue, g.Expired)})
 	}
 	for _, l := range r.Lag {
-		if l.Pending > 0 || l.Dropped > 0 || l.LastError != "" {
-			t.Rows = append(t.Rows, []string{"export " + l.Exporter, fmt.Sprintf("%d pending, %d dropped", l.Pending, l.Dropped), cmp.Or(l.LastError, l.LastDropped)})
+		if l.Pending > 0 || l.Dropped > 0 || l.LastError != "" || l.LastWarning != "" || l.RejectedSpans > 0 {
+			t.Rows = append(t.Rows, []string{"export " + l.Exporter,
+				fmt.Sprintf("%d pending, %d dropped, %d rejected spans", l.Pending, l.Dropped, l.RejectedSpans),
+				cmp.Or(l.LastError, l.LastWarning, l.LastDropped)})
 		}
 	}
 	return c.show(r, t)
@@ -245,9 +247,10 @@ func exportNow(c call) error {
 }
 
 func lagTable(lags []app.Lag) output.Table {
-	t := output.Table{Header: []string{"EXPORTER", "PENDING", "DROPPED", "ERROR"}}
+	t := output.Table{Header: []string{"EXPORTER", "PENDING", "DROPPED", "REJECTED SPANS", "ERROR OR WARNING"}}
 	for _, l := range lags {
-		t.Rows = append(t.Rows, []string{l.Exporter, strconv.Itoa(l.Pending), strconv.Itoa(l.Dropped), cmp.Or(l.LastError, l.LastDropped)})
+		t.Rows = append(t.Rows, []string{l.Exporter, strconv.Itoa(l.Pending), strconv.Itoa(l.Dropped),
+			strconv.FormatInt(l.RejectedSpans, 10), cmp.Or(l.LastError, l.LastWarning, l.LastDropped)})
 	}
 	return t
 }
