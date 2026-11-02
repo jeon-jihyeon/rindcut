@@ -1,0 +1,54 @@
+{
+  "generation": "g1",
+  "snapshots": [
+    {
+      "provider": "openai",
+      "api_version": "chat.completions.v1",
+      "model": "acme-model",
+      "meter_profile": "openai.chat.provider.v1",
+      "snapshot_id": "S-partial",
+      "run_ref": "run-1",
+      "budget_id": "B1",
+      "budget_revision": "1",
+      "budget_digest": "sha256:ed755b8af4253de15a76f97dc9fa4efb7d2229fc61059089edd945ce03f76551",
+      "manifest_id": "M-partial",
+      "manifest_digest": "sha256:2eff6a494fdca732c0dfa6950dd48a3c4ad1bea63d128e4e05429fcb4e2d961b",
+      "usage_complete": false,
+      "usage": {
+        "input_tokens": 100,
+        "output_tokens": 10,
+        "tool_calls": 1,
+        "elapsed_ms": 100,
+        "cached_input_tokens": 60,
+        "reasoning_output_tokens": 4
+      }
+    },
+    {
+      "provider": "openai",
+      "api_version": "chat.completions.v1",
+      "model": "acme-model",
+      "meter_profile": "openai.chat.provider.v1",
+      "snapshot_id": "S-final",
+      "run_ref": "run-1",
+      "budget_id": "B1",
+      "budget_revision": "1",
+      "budget_digest": "sha256:ed755b8af4253de15a76f97dc9fa4efb7d2229fc61059089edd945ce03f76551",
+      "manifest_id": "M-final",
+      "manifest_digest": "sha256:30c03d201f6ca46cc2c3e29981c1934f7462a7a189a8d13f0d35d7e832525847",
+      "usage_complete": true,
+      "usage": {
+        "input_tokens": 200,
+        "output_tokens": 40,
+        "cached_input_tokens": 120,
+        "reasoning_output_tokens": 16,
+        "tool_calls": 2,
+        "elapsed_ms": 500
+      },
+      "replaces": {
+        "snapshot_id": "S-partial",
+        "type": "acme.run_usage.partial",
+        "generation": "g1"
+      }
+    }
+  ]
+}

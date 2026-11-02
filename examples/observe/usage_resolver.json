@@ -1,0 +1,255 @@
+{
+  "budgets": [
+    {
+      "provider": "openai",
+      "api_version": "chat.completions.v1",
+      "model": "acme-model",
+      "meter_profile": "openai.chat.provider.v1",
+      "id": "B1",
+      "revision": "1",
+      "comparison": "inclusive",
+      "missing": "unknown",
+      "units": {
+        "input_tokens": "tokens",
+        "output_tokens": "tokens",
+        "tool_calls": "calls",
+        "elapsed_ms": "milliseconds"
+      },
+      "limits": {
+        "input_tokens": 200,
+        "output_tokens": 40,
+        "tool_calls": 2,
+        "elapsed_ms": 500
+      }
+    }
+  ],
+  "manifests": [
+    {
+      "provider": "openai",
+      "api_version": "chat.completions.v1",
+      "model": "acme-model",
+      "meter_profile": "openai.chat.provider.v1",
+      "id": "M-final",
+      "snapshot_id": "S-final",
+      "run_ref": "run-1",
+      "budget_id": "B1",
+      "budget_revision": "1",
+      "complete": true,
+      "primary_accounting_plane": "provider",
+      "otel_revision": "dc3571562603552dc555c667dfa327a638d94ab2",
+      "expected_attempts": [
+        "A1",
+        "A2",
+        "A-child"
+      ],
+      "receipts": [
+        {
+          "id": "R1",
+          "version": "1",
+          "digest": "sha256:bec59d978e763f091c27c5281cea2bfdff108cfbef90e90bebb8722826670fb1"
+        },
+        {
+          "id": "R2",
+          "version": "1",
+          "digest": "sha256:b7e8693126f417c7c66888e2328202a8a86a9637b87bf5a8710a39bef973ee88"
+        },
+        {
+          "id": "R-proxy",
+          "version": "1",
+          "digest": "sha256:4eb9898c98f2ef7cd1079dc3782e497410345d8c45b81e52782a8ac123137d19"
+        },
+        {
+          "id": "R-child",
+          "version": "1",
+          "digest": "sha256:e2da73f7e635a81e0625bf8db34b7a99e6b84b5b073a29a3449e512189b5c1b2"
+        },
+        {
+          "id": "R1",
+          "version": "1",
+          "digest": "sha256:bec59d978e763f091c27c5281cea2bfdff108cfbef90e90bebb8722826670fb1"
+        }
+      ],
+      "clock": {
+        "start": {
+          "clock": "C1",
+          "ms": 100
+        },
+        "end": {
+          "clock": "C1",
+          "ms": 600
+        }
+      },
+      "tool_calls": [
+        {
+          "id": "T1",
+          "run_ref": "run-1",
+          "scope": "direct_client",
+          "status": "success"
+        },
+        {
+          "id": "T2",
+          "run_ref": "run-1",
+          "scope": "direct_client",
+          "status": "failed"
+        },
+        {
+          "id": "T-child",
+          "run_ref": "run-1",
+          "scope": "subagent",
+          "status": "success"
+        },
+        {
+          "id": "T-internal",
+          "run_ref": "run-1",
+          "scope": "provider_internal",
+          "status": "success"
+        },
+        {
+          "id": "T1",
+          "run_ref": "run-1",
+          "scope": "direct_client",
+          "status": "success"
+        }
+      ]
+    }
+  ],
+  "receipts": [
+    {
+      "provider": "openai",
+      "api_version": "chat.completions.v1",
+      "model": "acme-model",
+      "meter_profile": "openai.chat.provider.v1",
+      "id": "R1",
+      "version": "1",
+      "run_ref": "run-1",
+      "attempt_id": "A1",
+      "request_ref": "Q1",
+      "accounting_plane": "provider",
+      "usage_scope": "inclusive",
+      "native": {
+        "kind": "openai.chat.completion",
+        "usage": {
+          "prompt_tokens": 100,
+          "completion_tokens": 20,
+          "total_tokens": 120,
+          "prompt_tokens_details": {
+            "cached_tokens": 60
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 8
+          }
+        }
+      }
+    },
+    {
+      "provider": "openai",
+      "api_version": "chat.completions.v1",
+      "model": "acme-model",
+      "meter_profile": "openai.chat.provider.v1",
+      "id": "R2",
+      "version": "1",
+      "run_ref": "run-1",
+      "attempt_id": "A2",
+      "request_ref": "Q2",
+      "accounting_plane": "provider",
+      "usage_scope": "exclusive",
+      "native": {
+        "kind": "openai.chat.completion",
+        "usage": {
+          "prompt_tokens": 100,
+          "completion_tokens": 20,
+          "total_tokens": 120,
+          "prompt_tokens_details": {
+            "cached_tokens": 60
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 8
+          }
+        }
+      }
+    },
+    {
+      "provider": "openai",
+      "api_version": "chat.completions.v1",
+      "model": "acme-model",
+      "meter_profile": "openai.chat.provider.v1",
+      "id": "R-proxy",
+      "version": "1",
+      "run_ref": "run-1",
+      "attempt_id": "A1",
+      "request_ref": "Q1",
+      "accounting_plane": "proxy",
+      "usage_scope": "inclusive",
+      "native": {
+        "kind": "openai.chat.completion",
+        "usage": {
+          "prompt_tokens": 100,
+          "completion_tokens": 20,
+          "total_tokens": 120,
+          "prompt_tokens_details": {
+            "cached_tokens": 60
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 8
+          }
+        }
+      },
+      "duplicate_of": "R1"
+    },
+    {
+      "provider": "openai",
+      "api_version": "chat.completions.v1",
+      "model": "acme-model",
+      "meter_profile": "openai.chat.provider.v1",
+      "id": "R-child",
+      "version": "1",
+      "run_ref": "run-1",
+      "attempt_id": "A-child",
+      "request_ref": "Q-child",
+      "accounting_plane": "provider",
+      "usage_scope": "exclusive",
+      "included_in": "R1",
+      "native": {
+        "kind": "openai.chat.completion",
+        "usage": {
+          "prompt_tokens": 30,
+          "completion_tokens": 5,
+          "prompt_tokens_details": {
+            "cached_tokens": 10
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 2
+          }
+        }
+      }
+    },
+    {
+      "provider": "openai",
+      "api_version": "chat.completions.v1",
+      "model": "acme-model",
+      "meter_profile": "openai.chat.provider.v1",
+      "id": "R1",
+      "version": "1",
+      "run_ref": "run-1",
+      "attempt_id": "A1",
+      "request_ref": "Q1",
+      "accounting_plane": "provider",
+      "usage_scope": "inclusive",
+      "native": {
+        "kind": "openai.chat.completion",
+        "usage": {
+          "prompt_tokens": 100,
+          "completion_tokens": 20,
+          "total_tokens": 120,
+          "prompt_tokens_details": {
+            "cached_tokens": 60
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 8
+          }
+        }
+      }
+    }
+  ],
+  "preparing": []
+}
