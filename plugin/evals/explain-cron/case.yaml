@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: explain-cron
+expected_outcome: |
+  Answer the scheduling syntax question without invoking the rindcut skill.
+  Do not create monitoring or register a job.

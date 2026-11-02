@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: explain-http-spans
+expected_outcome: |
+  Answer the instrumentation question without invoking the rindcut skill.
+  Do not configure a tracing exporter or an agent source.
