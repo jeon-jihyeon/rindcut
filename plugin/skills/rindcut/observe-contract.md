@@ -103,6 +103,10 @@ Encode UTF-8 JSON with no whitespace or trailing newline. Use decimal integers a
 
 The repository's `examples/observe` directory includes `a2a.py` and `usage.py`, ready source definitions, immutable input journals, separate evidence resolvers and literal expected manifests. Run them from the repository root with Python 3.10 or later. Review and replace the example paths and scopes before calling `source_preview` and `source_save`. Both scripts use the common protocols above; neither connects to a live agent, provider or arbitrary artifact URL.
 
+`nodloop_live.py` reads one record kind from an owner-fixed nodloop MCP program with `content: false`. Its example definition pins the child binary and uses an empty observer list. It keeps published identity, time, version and known enum claims, and drops free text, labels, sessions, reviewers, paths and URLs. `guard` is not supported. The declared generation is not independent store attestation; pin the record directory for a long-lived registration. Removed native cursors require explicit reset. This reader checks collection fidelity, not an independent business outcome or human authorization.
+
+The collector definition passes `--managed-process-group` so the native MCP child inherits the reader group. This mode requires the reader to lead that group; the reader reaps its direct child and the collector removes remaining group members on return or cancellation. Standalone use creates and cleans up a separate child group. The native MCP handshake and record request share one deadline across nonblocking writes and reads. The definition also fingerprints the shared stdio helper; changing it requires a fresh preview.
+
 ```text
 immutable snapshot → external reader → event → existing observation store
 fixed criterion and separate evidence → external observer → observation

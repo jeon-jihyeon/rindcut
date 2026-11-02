@@ -1,0 +1,54 @@
+{
+  "id": "nodloop-public-runs",
+  "enabled": true,
+  "source_instance": "acme",
+  "stream": "runs",
+  "capability": {
+    "kind": "event_stream",
+    "types": ["nodloop.run"],
+    "limitations": [
+      "metadata_only",
+      "published_envelope_only",
+      "single_record_kind",
+      "guard_not_supported",
+      "source_claims_only",
+      "no_unrecorded_actions",
+      "owner_declared_generation",
+      "no_store_generation_attestation",
+      "native_cursor_invalid_after_removal",
+      "no_destination_readback"
+    ]
+  },
+  "adapter_revision": "nodloop-live-v1",
+  "projection_profile": "nodloop.public.metadata.v1",
+  "reader": {
+    "program": "python3",
+    "args": [
+      "examples/observe/nodloop_live.py",
+      "--managed-process-group",
+      "--nodloop-program", "/home/ann/.nodloop/bin/nodloop",
+      "--record-dir", "/home/ann/.nodloop/records",
+      "--kind", "run",
+      "--source-instance", "acme",
+      "--generation", "g1",
+      "--stream", "runs"
+    ],
+    "allowed_attributes": [
+      "record_kind",
+      "native_schema_version",
+      "declared_verdict",
+      "declared_result",
+      "declared_actor",
+      "declared_proof"
+    ],
+    "timeout_seconds": 15,
+    "limit": 100,
+    "fingerprint_files": [
+      "examples/observe/nodloop_live.py",
+      "examples/observe/adapter.py",
+      "examples/observe/stdio.py",
+      "/home/ann/.nodloop/bin/nodloop"
+    ]
+  },
+  "observers": []
+}
