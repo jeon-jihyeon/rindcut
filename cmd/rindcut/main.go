@@ -17,13 +17,13 @@ import (
 // Set by goreleaser through -X main.version
 var version = "dev"
 
-const usageText = `rindcut checks that scheduled AI agent jobs really ran and produced what they promised
+const usageText = `rindcut checks scheduled job outputs and records observations from connected agent sources
 
 usage: rindcut [--json] COMMAND [flags]
 
 commands:
-  tick                  judge closed slots and run the exporters, what the scheduler calls every 5 minutes
-  check JOB [--at T]    dry run of a job's latest slot, recorded as a probe
+  tick                  judge closed slots, sync observations and run exporters
+  check [--at T] JOB    dry run of a job's latest slot, recorded as a probe
   jobs [--all]          list jobs
   ledger [flags]        list ledger entries
   report [--since D]    summary of verdicts, problems, silent jobs and export lag
@@ -38,6 +38,8 @@ commands:
   version               print the version
 
 Jobs are registered by talking to Claude through the rindcut plugin.
+Flags come before positional arguments.
+The installed scheduler calls tick every 5 minutes.
 
 exit codes: 0 done, 1 the command failed, 2 usage error
 `

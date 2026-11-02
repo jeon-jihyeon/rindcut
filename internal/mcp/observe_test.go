@@ -126,7 +126,8 @@ func TestSourceRegistration(t *testing.T) {
 			assert.NotContains(t, source, "reader")
 			status, err := h.app.Status(context.Background())
 			require.NoError(t, err)
-			assert.False(t, status.TickInstalled)
+			assert.True(t, status.TickInstalled)
+			assert.Equal(t, "ready", status.Schedule.State)
 			removed, message := h.call(t, "source_remove", map[string]any{
 				"id": "acme", "expected_revision": 1, "confirmed": true,
 			})

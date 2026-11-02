@@ -3,6 +3,7 @@ package judge
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -24,10 +25,10 @@ const (
 // Judge reads the ledger, judges closed slots and appends verdicts
 // Callers run one Tick at a time, since two would judge the same slot twice
 type Judge struct {
-	Ledger *ledger.Ledger
-	Now    func() time.Time
-	// UserHome expands ~ in check paths and holds .claude/projects for the backfill
-	UserHome string
+	Ledger          *ledger.Ledger
+	Now             func() time.Time
+	UserHome        string
+	ClaudeConfigDir string
 	// Dir is where commands of jobs without a folder run
 	Dir string
 }
@@ -259,10 +260,15 @@ func (st state) matching(r job.Job, s job.Slot) []string {
 // because SessionEnd doesn't fire when a session is killed
 // It reads transcripts written since the slot, and keeps only sessions in a session job's folder
 func (j Judge) backfill(ctx context.Context, st state, since time.Time) (int, error) {
-	paths, _ := filepath.Glob(filepath.Join(j.UserHome, ".claude", "projects", "*", "*.jsonl"))
+	config := j.ClaudeConfigDir
+	if config == "" {
+		config = filepath.Join(j.UserHome, ".claude")
+	}
+	paths, _ := fs.Glob(os.DirFS(config), "projects/*/*.jsonl")
 	folders := SessionFolders(st.revs)
 	added := 0
-	for _, p := range paths {
+	for _, name := range paths {
+		p := filepath.Join(config, name)
 		info, err := os.Stat(p)
 		if err != nil || info.ModTime().Before(since) {
 			continue

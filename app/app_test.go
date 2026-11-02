@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -33,23 +34,47 @@ type world struct {
 	refuse *bool
 }
 
+type scheduleExit int
+
+func (e scheduleExit) Error() string { return "schedule command failed" }
+func (e scheduleExit) ExitCode() int { return int(e) }
+
 func newWorld(t *testing.T) world {
 	t.Helper()
 	now := time.Date(2026, 10, 8, 9, 10, 0, 0, time.UTC)
 	refuse := false
 	w := world{now: &now, folder: t.TempDir(), warn: &bytes.Buffer{}, refuse: &refuse}
 	userHome := t.TempDir()
+	program, err := os.Executable()
+	require.NoError(t, err)
+	loaded := &atomic.Bool{}
 	w.a = app.App{
 		Home: t.TempDir(), UserHome: userHome, Now: func() time.Time { return *w.now }, Version: "test", Warn: w.warn,
-		Installer: app.Scheduler{Binary: "/bin/rindcut", Home: "/h", UserHome: userHome, GOOS: "darwin", UID: 501,
-			Exec: func(name string, args ...string) error {
-				if *w.refuse && len(args) > 0 && args[0] == "bootstrap" {
-					return errors.New("refused")
-				}
-				return nil
-			}},
+		Installer: app.Scheduler{Binary: program, Home: "/h", UserHome: userHome, GOOS: "darwin", UID: 501},
+	}
+	w.a.Installer.Run = func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		switch args[0] {
+		case "print-disabled":
+			return []byte("disabled services = {\n \"dev.rindcut.tick\" => false\n}"), nil
+		case "print":
+			if !loaded.Load() {
+				return nil, scheduleExit(113)
+			}
+			return []byte(fmt.Sprintf("gui/501/dev.rindcut.tick = {\n path = %s/Library/LaunchAgents/dev.rindcut.tick.plist\n"+
+				" state = not running\n run interval = 300 seconds\n program = %s\n arguments = {\n %s\n tick\n }\n"+
+				" environment = {\n HOME => %s\n RINDCUT_HOME => /h\n }\n}", userHome, program, program, userHome)), nil
+		case "bootstrap":
+			if *w.refuse {
+				return nil, errors.New("refused")
+			}
+			loaded.Store(true)
+		case "bootout":
+			loaded.Store(false)
+		}
+		return nil, nil
 	}
 	require.NoError(t, w.a.Ready())
+	require.NoError(t, os.Chmod(w.a.Home, 0o700))
 	return w
 }
 
@@ -388,7 +413,8 @@ func TestTickLockAndStatus(t *testing.T) {
 	st, err = w.a.Status(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, st.LastTick)
-	assert.Equal(t, app.Status{Version: "test", Home: string(w.a.Home), TickInstalled: true, LastTick: st.LastTick, Jobs: 1}, st)
+	assert.Equal(t, app.Status{Version: "test", Home: string(w.a.Home), TickInstalled: true, LastTick: st.LastTick, Jobs: 1,
+		Schedule: app.ScheduleStatus{State: "ready", Reason: "registered"}}, st)
 	assert.Empty(t, w.warn.String())
 }
 

@@ -2,7 +2,9 @@ package lock_test
 
 import (
 	"context"
+	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -59,4 +61,37 @@ func TestReleaseLetsNextIn(t *testing.T) {
 	again, err := lock.Acquire(ctx, path, 0)
 	require.NoError(t, err)
 	again()
+}
+
+func TestAcquireRejectsNonRegularFiles(t *testing.T) {
+	tcs := []struct {
+		name string
+		kind string
+	}{
+		{name: "symlink", kind: "symlink"},
+		{name: "fifo", kind: "fifo"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			path := filepath.Join(root, "schedule.lock")
+			target := filepath.Join(root, "target")
+			require.NoError(t, os.WriteFile(target, []byte("preserved"), 0o600))
+			switch tc.kind {
+			case "symlink":
+				require.NoError(t, os.Symlink(target, path))
+			case "fifo":
+				require.NoError(t, syscall.Mkfifo(path, 0o600))
+			}
+			unlock, err := lock.Acquire(t.Context(), path, 0)
+			if unlock != nil {
+				unlock()
+			}
+			require.Error(t, err)
+			body, err := os.ReadFile(target)
+			require.NoError(t, err)
+			assert.Equal(t, "preserved", string(body))
+		})
+	}
 }

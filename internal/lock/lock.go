@@ -17,9 +17,14 @@ var ErrBusy = errors.New("held by another rindcut process")
 // Acquire takes an exclusive lock on path, waiting up to wait
 // A zero wait tries once, for a caller that should skip its work rather than queue behind another run
 func Acquire(ctx context.Context, path string, wait time.Duration) (func(), error) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0o600)
 	if err != nil {
 		return nil, err
+	}
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		_ = f.Close()
+		return nil, errors.New("lock must be a regular file")
 	}
 	deadline := time.Now().Add(wait)
 	for {
