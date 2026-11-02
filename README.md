@@ -29,7 +29,7 @@ Then tell Claude what to watch, in your own words:
 > make sure the 9am price collection really happened. It writes out/<date>.csv in ~/price
 ```
 
-Claude asks what it needs one question at a time, shows you what each check sees right now, and saves the job only after you agree. The first saved job schedules the checker every 5 minutes with launchd on macOS or a systemd user timer on Linux. You never edit a file or type a command.
+Claude asks what it needs one question at a time, shows you what each check sees right now, and saves the job only after you agree. The first saved job or enabled source schedules the checker every 5 minutes with launchd on macOS or a systemd user timer on Linux. You never edit a file or type a command.
 
 Ask any time:
 
@@ -71,6 +71,8 @@ An optional external critic evaluates registered content criteria after every ob
 
 A source reader collects records from an agent that exposes the common contract. A separate observer checks registered evidence and records its result alongside the source claim. Capabilities, coverage and gaps describe what an adapter can see. A claim or an observation never grants human approval.
 
+Saving an enabled source starts the shared five-minute collector, even with no scheduled job. [examples/observe](examples/observe) has offline A2A and run usage profiles and a metadata-only nodloop reader.
+
 Ask Claude to register a source and review its executable, arguments, evidence access and retained metadata before confirming. Readers and observers run with your OS privileges and are not sandboxed. Keep credentials and private content out of retained fields. See the [adapter contract](plugin/skills/rindcut/observe-contract.md) for the wire format and limits.
 
 ## Exporters
@@ -92,14 +94,14 @@ The plugin is all an owner needs. The CLI is there for scripts and for looking a
 | Command | What it does |
 |---|---|
 | `rindcut tick` | judge closed slots, sync sources, run due observations and exporters |
-| `rindcut check JOB` | dry run of a job's latest slot |
+| `rindcut check [--at T] JOB` | dry run of a job's latest slot |
 | `rindcut jobs`, `ledger`, `report` | list jobs, ledger entries and the summary. `--json` for machines |
 | `rindcut export` | send new entries to the exporters |
 | `rindcut observe sync` | collect source records and run due observations |
 | `rindcut observe records` | query observation records as JSONL |
 | `rindcut observe status` | show coverage, gaps and unresolved observations |
 | `rindcut install`, `uninstall` | schedule or unschedule the tick |
-| `rindcut status` | version, home and tick state |
+| `rindcut status` | version, home, OS scheduler health and last tick |
 
 `RINDCUT_HOME` moves `~/.rindcut`. Exit codes are 0 done, 1 failed and 2 usage error.
 

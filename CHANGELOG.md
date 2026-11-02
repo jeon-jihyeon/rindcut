@@ -11,6 +11,7 @@ All notable changes to rindcut are listed here. The format follows [Keep a Chang
 - Collect records from owner-configured agent sources and observations from separate programs, keeping source claims and observation results distinct
 - Inspect observation records through the CLI and MCP, with cursor queries and JSONL export
 - Include schemas, a source and observer contract, and examples for building adapters
+- Suggest a session marker from a named Desktop task's prompt file
 
 ### Changed
 
