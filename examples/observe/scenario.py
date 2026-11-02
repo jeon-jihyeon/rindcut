@@ -11,35 +11,200 @@ import threading
 import time
 from typing import Any
 
+import stdio
+
 
 HERE = Path(__file__).resolve().parent
+SCHEDULER = '''import json
+import os
+from pathlib import Path
+import plistlib
+import shlex
+import sys
+
+folder = Path(__file__).parent
+command = Path(sys.argv[0]).name
+args = sys.argv[1:]
+with (folder.parent / "scheduler-calls.jsonl").open("a", encoding="utf-8") as log:
+    log.write(json.dumps({"command": command, "args": args}) + "\\n")
+state_path = folder / "state.json"
+state = json.loads(state_path.read_text()) if state_path.exists() else {}
+
+def save():
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+
+if command == "launchctl":
+    if len(args) == 2 and args[0] == "print":
+        loaded = state.get("launchd")
+        if loaded is None or loaded["target"] != args[1]:
+            raise SystemExit(113)
+        config = loaded["config"]
+        print(args[1] + " = {")
+        print(" path = " + loaded["path"])
+        print(" state = not running")
+        print(" run interval = 300 seconds")
+        print(" program = " + config["ProgramArguments"][0])
+        print(" arguments = {")
+        for value in config["ProgramArguments"]:
+            print(" " + value)
+        print(" }")
+        print(" environment = {")
+        for key, value in config["EnvironmentVariables"].items():
+            print(" " + key + " => " + value)
+        print(" }")
+        print("}")
+        raise SystemExit(0)
+    if len(args) == 2 and args[0] == "print-disabled":
+        print('disabled services = {\\n "dev.rindcut.tick" => enabled\\n}')
+        raise SystemExit(0)
+    if len(args) == 2 and args[0] == "enable":
+        raise SystemExit(0)
+    if len(args) == 3 and args[0] == "bootstrap":
+        path = Path(args[2])
+        if not path.resolve().is_relative_to(folder.parent.resolve()):
+            raise SystemExit(2)
+        config = plistlib.loads(path.read_bytes())
+        state["launchd"] = {"target": args[1] + "/" + config["Label"], "path": str(path), "config": config}
+        save()
+        raise SystemExit(0)
+    if len(args) == 2 and args[0] == "bootout":
+        state.pop("launchd", None)
+        save()
+        raise SystemExit(0)
+if command == "systemctl" and args and args[0] == "--user":
+    args = args[1:]
+    unit_dir = Path(os.environ["HOME"]) / ".config" / "systemd" / "user"
+    if args == ["daemon-reload"]:
+        loaded = state.setdefault("systemd", {})
+        loaded["units"] = {path.name: path.read_text() for path in unit_dir.glob("rindcut-tick.*")}
+        save()
+        raise SystemExit(0)
+    if len(args) == 3 and args[0] in ("enable", "disable") and args[1:] == ["--now", "rindcut-tick.timer"]:
+        state.setdefault("systemd", {})["enabled"] = args[0] == "enable"
+        save()
+        raise SystemExit(0)
+    if len(args) == 4 and args[0] == "show" and args[2].startswith("--property=") and args[3] == "--all":
+        loaded = state.get("systemd", {})
+        content = loaded.get("units", {}).get(args[1])
+        values = {"LoadState": "not-found"}
+        if content is not None:
+            values = {"LoadState": "loaded", "FragmentPath": str(unit_dir / args[1]), "DropInPaths": ""}
+            if args[1].endswith(".timer"):
+                values.update(ActiveState="active" if loaded.get("enabled") else "inactive",
+                              UnitFileState="enabled" if loaded.get("enabled") else "disabled",
+                              Unit="rindcut-tick.service", Persistent="yes", TimersMonotonic="",
+                              TimersCalendar="{ OnCalendar=*-*-* *:00/5:00 ; next_elapse=n/a }")
+            else:
+                fields = [line.split("=", 1) for line in content.splitlines() if "=" in line]
+                environment = [shlex.split(value)[0].replace("%%", "%")
+                               for key, value in fields if key == "Environment"]
+                arguments = next(shlex.split(value) for key, value in fields if key == "ExecStart")
+                arguments = [value.replace("%%", "%") for value in arguments]
+                values["Environment"] = " ".join(json.dumps(value) if any(c.isspace() for c in value) else value
+                                                 for value in environment)
+                values["ExecStart"] = ("{ path=" + arguments[0] + " ; argv[]=" + " ".join(arguments)
+                                       + " ; ignore_errors=no ; }")
+        for key in args[2].removeprefix("--property=").split(","):
+            print(key + "=" + values.get(key, ""))
+        raise SystemExit(0)
+sys.stderr.write("unsupported simulated scheduler request\\n")
+raise SystemExit(2)
+'''
+
+
+def scheduler_environment(root: Path, home: Path) -> dict[str, str]:
+    folder = root / "scheduler-bin"
+    folder.mkdir()
+    script = "#!" + sys.executable + "\n" + SCHEDULER
+    for name in ("launchctl", "systemctl"):
+        path = folder / name
+        path.write_text(script, encoding="utf-8")
+        path.chmod(0o700)
+    return {"HOME": str(root), "RINDCUT_HOME": str(home), "PATH": str(folder) + os.pathsep + os.defpath,
+            "PYTHONDONTWRITEBYTECODE": "1"}
+
+
+def scheduler_calls(root: Path) -> list[dict[str, Any]]:
+    path = root / "scheduler-calls.jsonl"
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()] if path.exists() else []
 
 
 class Client:
     def __init__(self, binary: Path, environment: dict[str, str]) -> None:
         self.process = subprocess.Popen([str(binary), "mcp"], env=environment, stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-        self.messages = queue.Queue()
-        self.sequence = 0
-        threading.Thread(target=self.read, daemon=True).start()
-        self.request("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
-                                    "clientInfo": {"name": "acme", "version": "1"}})
-        self.send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        self.reader = None
+        try:
+            self.messages = queue.Queue()
+            self.sequence = 0
+            self.failure = None
+            self.reader = threading.Thread(target=self.read, daemon=True)
+            self.reader.start()
+            self.request("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
+                                        "clientInfo": {"name": "acme", "version": "1"}})
+            self.send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        except BaseException:
+            self.close()
+            raise
 
     def read(self) -> None:
-        for line in self.process.stdout:
-            self.messages.put(json.loads(line))
+        failure = RuntimeError("MCP stream closed")
+        try:
+            for line in self.process.stdout:
+                try:
+                    message = json.loads(line)
+                except (ValueError, RecursionError):
+                    failure = RuntimeError("MCP stream returned invalid JSON")
+                    break
+                if not isinstance(message, dict):
+                    failure = RuntimeError("MCP stream returned non-object JSON")
+                    break
+                self.messages.put(message)
+        except (OSError, ValueError, UnicodeError):
+            failure = RuntimeError("MCP stream read failed")
+        self.messages.put(failure)
 
-    def send(self, value: dict[str, Any]) -> None:
-        self.process.stdin.write(json.dumps(value) + "\n")
-        self.process.stdin.flush()
+    def send(self, value: dict[str, Any], *, deadline: float | None = None) -> None:
+        if deadline is None:
+            deadline = time.monotonic() + 20
+        try:
+            stdio.write(self.process.stdin, (json.dumps(value) + "\n").encode("utf-8"), deadline)
+        except TimeoutError:
+            raise TimeoutError("MCP response timed out") from None
+        except (OSError, ValueError, UnicodeError):
+            raise RuntimeError("MCP stream write failed") from None
 
     def request(self, method: str, parameters: dict[str, Any]) -> dict[str, Any]:
+        if getattr(self, "failure", None) is not None:
+            raise self.failure from None
+        deadline = time.monotonic() + 20
         self.sequence += 1
-        self.send({"jsonrpc": "2.0", "id": self.sequence, "method": method, "params": parameters})
+        write_failure = None
+        try:
+            self.send({"jsonrpc": "2.0", "id": self.sequence, "method": method, "params": parameters}, deadline=deadline)
+        except (RuntimeError, TimeoutError) as error:
+            write_failure = error
         while True:
-            result = self.messages.get(timeout=20)
+            try:
+                if write_failure is not None:
+                    result = self.messages.get_nowait()
+                else:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError("MCP response timed out")
+                    result = self.messages.get(timeout=remaining)
+            except queue.Empty as error:
+                if write_failure is not None:
+                    self.failure = write_failure
+                    raise write_failure from None
+                raise TimeoutError("MCP response timed out") from error
+            if isinstance(result, RuntimeError):
+                self.failure = result
+                raise result from None
             if result.get("id") != self.sequence:
+                if write_failure is not None and time.monotonic() >= deadline:
+                    self.failure = write_failure
+                    raise write_failure from None
                 continue
             if "error" in result:
                 raise AssertionError(result["error"])
@@ -52,12 +217,24 @@ class Client:
         return result.get("structuredContent") or json.loads(result["content"][0]["text"])
 
     def close(self) -> None:
-        self.process.stdin.close()
+        try:
+            self.process.stdin.close()
+        except (OSError, ValueError):
+            pass
         try:
             self.process.wait(timeout=5)
         except subprocess.TimeoutExpired:
-            self.process.kill()
+            try:
+                self.process.kill()
+            except ProcessLookupError:
+                pass
             self.process.wait(timeout=5)
+        reader = getattr(self, "reader", None)
+        if reader is not None and reader.is_alive():
+            reader.join(timeout=5)
+        for stream in (self.process.stdout, self.process.stderr):
+            if stream is not None:
+                stream.close()
 
 
 def write(path: Path, value: dict[str, Any]) -> None:
@@ -117,7 +294,7 @@ def run(binary: Path) -> dict[str, Any]:
         write(journal, {"generation": "g1", "records": [{"id": "e1", "type": "acme.unregistered.terminal",
               "action_id": "A1", "claim": "success", "authority": "person", "verified": True}]})
         write(destination, {"effects": {}})
-        environment = {"HOME": str(root), "RINDCUT_HOME": str(home), "PATH": os.defpath}
+        environment = scheduler_environment(root, home)
         client = Client(binary, environment)
         try:
             request = {"definition": source_definition(journal, destination), "expected_revision": 0}
@@ -164,12 +341,14 @@ def run(binary: Path) -> dict[str, Any]:
             client.call("observe_status", {})
             assert tree_hash(home) == before_queries, "read-only query changed files"
             assert str(journal) not in json.dumps(public) and str(HERE) not in json.dumps(public)
+            scheduler_count = len(scheduler_calls(root))
         finally:
             client.close()
     assert hashlib.sha256(binary.read_bytes()).hexdigest() == before_binary
     return {"binary_sha256": before_binary, "events_match_manifest": True, "observation_results": transitions,
             "explicit_correction_preserved": True, "JSONL_matches_MCP": True, "queries_are_read_only": True,
-            "authority_not_promoted": True, "live_provider_calls": 0}
+            "authority_not_promoted": True, "live_provider_calls": 0,
+            "os_scheduler_isolated": True, "simulated_scheduler_commands": scheduler_count}
 
 
 def main() -> None:

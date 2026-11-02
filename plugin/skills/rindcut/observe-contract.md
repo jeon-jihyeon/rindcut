@@ -98,3 +98,31 @@ A later observation does not automatically correct an earlier one. To explicitly
 Rindcut computes the digest of a deterministic JSON array in this order: protocol `rindcut.projection/v1`, `source_instance`, `generation`, `stream`, `id`, `type`, `schema_version`, `producer_version`, `adapter_revision`, `projection_profile`, `occurred_at`, `action_id`, `attempt_id`, `links`, `attributes`, `evidence`. Missing optional fields become null. Normalize timestamps to UTC with nine fractional digits. Transform each link into `[relation, [source_id, source_instance, generation, stream, type, id, projection_profile]]` and each evidence item into `[kind, namespace, id, digest]`, using null for a missing digest. Transform attributes into `[key, value]` pairs sorted by ASCII key; preserve the order of other arrays.
 
 Encode UTF-8 JSON with no whitespace or trailing newline. Use decimal integers and lowercase booleans and null. Escape quotes and backslashes, not slash. Use `\b`, `\f`, `\n`, `\r`, `\t` for those controls and lowercase `\u00xx` for other C0 controls. Escape `<`, `>`, `&`, U+2028 and U+2029 as lowercase `\u` escapes; leave other valid Unicode in UTF-8 without normalization. SHA-256 these bytes. Capture id, captured time, source revision and public cursor are excluded. The [projection vectors](https://github.com/jeon-jihyeon/rindcut/blob/main/schemas/observe/projection-vectors.json) let implementations in another language check canonical bytes and digests. The digest compares projections; it does not authenticate the producer or prove a claim true.
+
+## Offline A2A and usage profiles
+
+The repository's `examples/observe` directory includes `a2a.py` and `usage.py`, ready source definitions, immutable input journals, separate evidence resolvers and literal expected manifests. Run them from the repository root with Python 3.10 or later. Review and replace the example paths and scopes before calling `source_preview` and `source_save`. Both scripts use the common protocols above; neither connects to a live agent, provider or arbitrary artifact URL.
+
+```text
+immutable snapshot → external reader → event → existing observation store
+fixed criterion and separate evidence → external observer → observation
+record query → external consumer or execution controller
+```
+
+| Profile | Recorded claim | Independent comparison within the supplied fixture scope |
+|---|---|---|
+| A2A wire 1.0, specification 1.0.1 | Immutable Task sample with a distinct sample id, scoped Task reference, metadata and fixed artifact version | Registered destination scope and closed time window, required effects and artifacts, cancellation cutoff, explicit idempotency scope and artifact byte digest |
+| Run usage | Immutable partial or final snapshot with budget revision, meter profile and integer counters | Fixed budget digest, completeness manifest and versioned native receipts bound to provider, API, model, run, attempt and accounting plane |
+
+For A2A, `COMPLETED` is a source claim. Optional artifacts become required only through the criterion. Unknown chunk coverage, missing versions, expired read access and unknown cancellation order remain unknown. Missing effects in open coverage remain pending; absence can refute a requirement only within its fixed closed window. Distinct Tasks sharing a context are not automatically duplicates. These examples do not establish A2A protocol conformance or general answer correctness. The [pinned A2A specification](https://github.com/a2aproject/A2A/blob/v1.0.1/docs/specification.md) defines the protocol independently.
+
+For usage, the capability includes `acme.run_usage.partial` and `acme.run_usage.final`, but the supplied observer selects final only. Partial snapshots remain recorded with no observation series. A later final has a new identity and explicit replacement link. Consumers select one cumulative snapshot, never sum partial and final values. Ambiguous replacement scope stays unresolved. The helper `select_snapshot` requires captured events with `source_id`; a raw source page consumer must add its envelope's `source_id` before selection.
+
+The fixed budget uses inclusive upper bounds: equality passes, an excess refutes, and a required missing dimension stays unknown. OpenAI cached input and reasoning output are subsets of native totals; Anthropic input includes native input, cache creation and cache read. Cumulative streaming output is not summed across chunks. Actual retry consumption counts separately from receipt redelivery, and explicit inclusive parent or duplicate receipts are not counted twice. Direct client tool calls include failures; elapsed time uses one clock. These are pinned normalization profiles, not interchangeable prices or billing verification. See [OpenAI usage](https://developers.openai.com/api/reference/resources/completions#completion-usage), [Anthropic caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching#tracking-cache-performance) and the [pinned OTel GenAI convention](https://github.com/open-telemetry/semantic-conventions-genai/blob/dc3571562603552dc555c667dfa327a638d94ab2/docs/gen-ai/client-inference.md).
+
+```sh
+python3 -m unittest discover -s examples/observe -p 'test_*.py'
+python3 examples/observe/profile_scenario.py --binary /path/to/rindcut
+```
+
+The tests check literal expected values, deliberately broken normalization and judgments, and the shared CLI and MCP paths. The scenario prints its binary digest and assertion results. Success establishes fixture behavior only. Provider accounts, a protocol server, production destinations, long running schedules and backend storage remain separate checks. No result stops an agent, retries its work, authenticates human approval or changes a scheduled verdict.
