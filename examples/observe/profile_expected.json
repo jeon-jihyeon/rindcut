@@ -1,0 +1,709 @@
+{
+  "schema_version": "rindcut.profile.acceptance/v1",
+  "scope": "Offline original-source acceptance cases through one unchanged core binary and its public source, sync and record contracts.",
+  "defaults": {
+    "event_count": 1,
+    "observation_count": 1,
+    "series_count": 1,
+    "observer_calls": 1,
+    "source_revision": 1,
+    "capture_source_revision": 1,
+    "observer_revision": 1,
+    "criterion_revision": "C1",
+    "actor_kind": "code",
+    "target_matches_capture": true,
+    "registered_source_matches_capture": true,
+    "supersedes_absent": true,
+    "authority_absent": true,
+    "verified_absent": true,
+    "record_ids_unique": true
+  },
+  "profile_contracts": {
+    "a2a": {
+      "event_type": "a2a.task.snapshot",
+      "projection_profile": "a2a.task.snapshot.v1",
+      "source_instance": "acme-a2a",
+      "generation": "g1",
+      "stream": "tasks"
+    },
+    "usage": {
+      "event_type": "acme.run_usage.final",
+      "projection_profile": "acme.run_usage.snapshot.v1",
+      "source_instance": "acme",
+      "generation": "g1",
+      "stream": "usage",
+      "usage_complete": true
+    }
+  },
+  "execution_contract": {
+    "isolated_home_per_case": true,
+    "binary_hash_unchanged": true,
+    "registration_executes_no_adapters": true,
+    "normal_interval_seconds": 3600,
+    "normal_deadline_seconds": 60,
+    "transition_interval_seconds": 1,
+    "transition_same_capture_and_series": true,
+    "cli_json_and_jsonl_equal_mcp": true,
+    "readonly_home_hash_unchanged": true,
+    "readonly_adapter_calls": 0,
+    "live_provider_calls": 0,
+    "result_null_means_no_observation": true
+  },
+  "cases": [
+    {
+      "id": "a2a-normal",
+      "profile": "a2a",
+      "result": "confirmed",
+      "reason_code": "criterion_satisfied",
+      "input": "Use the closed destination receipt and matching immutable artifact bytes."
+    },
+    {
+      "id": "a2a-closed-missing-effect",
+      "profile": "a2a",
+      "result": "refuted",
+      "reason_code": "required_effect_missing",
+      "input": "Keep complete true and the fixed window; remove effects."
+    },
+    {
+      "id": "a2a-closed-missing-artifact",
+      "profile": "a2a",
+      "result": "refuted",
+      "reason_code": "required_artifact_missing",
+      "input": "Set the closed Task receipt artifact_state to absent while retaining stale version bytes and the source artifact proof."
+    },
+    {
+      "id": "a2a-artifact-presence-unknown",
+      "profile": "a2a",
+      "result": "unknown",
+      "reason_code": "artifact_presence_unknown",
+      "input": "Set the closed Task receipt artifact_state to unknown while retaining stale version bytes."
+    },
+    {
+      "id": "a2a-delayed-pending",
+      "profile": "a2a",
+      "result": "pending",
+      "reason_code": "effect_not_yet_observed",
+      "input": "Set complete false and effects empty; keep the fixed window and immutable source event."
+    },
+    {
+      "id": "a2a-delayed-then-ready",
+      "profile": "a2a",
+      "result": "confirmed",
+      "reason_code": "criterion_satisfied",
+      "input": "First collect the open empty receipt, then restore the original closed receipt without changing source identity.",
+      "steps": [
+        {
+          "result": "pending",
+          "reason_code": "effect_not_yet_observed",
+          "observation_count": 1,
+          "observer_calls": 1
+        },
+        {
+          "result": "confirmed",
+          "reason_code": "criterion_satisfied",
+          "observation_count": 2,
+          "observer_calls": 2
+        }
+      ],
+      "overrides": {
+        "observation_count": 2,
+        "observer_calls": 2
+      }
+    },
+    {
+      "id": "a2a-chunk-gap",
+      "profile": "a2a",
+      "result": "unknown",
+      "reason_code": "chunk_gap",
+      "input": "Set source sample chunks_complete false; retain otherwise valid destination proof."
+    },
+    {
+      "id": "a2a-unreadable-destination",
+      "profile": "a2a",
+      "result": "unknown",
+      "reason_code": "destination_unreadable",
+      "input": "Set destination readable false."
+    },
+    {
+      "id": "a2a-fixed-version-unavailable",
+      "profile": "a2a",
+      "result": "unknown",
+      "reason_code": "artifact_version_unavailable",
+      "input": "Remove the referenced immutable artifact version from destination artifacts."
+    },
+    {
+      "id": "a2a-artifact-digest-mismatch",
+      "profile": "a2a",
+      "result": "refuted",
+      "reason_code": "artifact_digest_mismatch",
+      "input": "Change only the bytes returned for the pinned artifact ref; keep its source digest fixed."
+    },
+    {
+      "id": "a2a-cancel-before-cutoff",
+      "profile": "a2a",
+      "result": "confirmed",
+      "reason_code": "criterion_satisfied",
+      "input": "Use TASK_STATE_CANCELED, cutoff 2026-01-01T00:01:00Z and effect occurred_at 2026-01-01T00:00:30Z."
+    },
+    {
+      "id": "a2a-cancel-at-cutoff",
+      "profile": "a2a",
+      "result": "refuted",
+      "reason_code": "effect_after_cancel_cutoff",
+      "input": "Use TASK_STATE_CANCELED, cutoff and effect occurred_at both 2026-01-01T00:01:00Z."
+    },
+    {
+      "id": "a2a-cancel-after-cutoff",
+      "profile": "a2a",
+      "result": "refuted",
+      "reason_code": "effect_after_cancel_cutoff",
+      "input": "Use TASK_STATE_CANCELED, cutoff 2026-01-01T00:01:00Z and effect occurred_at 2026-01-01T00:01:30Z."
+    },
+    {
+      "id": "a2a-cancel-order-unknown",
+      "profile": "a2a",
+      "result": "unknown",
+      "reason_code": "cancel_order_unknown",
+      "input": "Use TASK_STATE_CANCELED and a fixed cutoff; omit effect occurred_at."
+    },
+    {
+      "id": "a2a-duplicate-known-scope",
+      "profile": "a2a",
+      "result": "refuted",
+      "reason_code": "duplicate_business_effect",
+      "input": "Supply two distinct effect ids in order-1 and criterion idempotency_scope order-1."
+    },
+    {
+      "id": "a2a-duplicate-scope-unknown",
+      "profile": "a2a",
+      "result": "unknown",
+      "reason_code": "idempotency_scope_unknown",
+      "input": "Supply two effects labeled order-1 but fix criterion idempotency_scope to order-2."
+    },
+    {
+      "id": "a2a-no-idempotency-contract",
+      "profile": "a2a",
+      "result": "confirmed",
+      "reason_code": "criterion_satisfied",
+      "input": "Supply two distinct otherwise valid effects without an idempotency criterion; do not infer a protocol-wide uniqueness guarantee."
+    },
+    {
+      "id": "a2a-destination-scope-mismatch",
+      "profile": "a2a",
+      "result": "unknown",
+      "reason_code": "scope_mismatch",
+      "input": "Change destination caller scope while source scope and fixed criterion remain unchanged."
+    },
+    {
+      "id": "a2a-coverage-window-mismatch",
+      "profile": "a2a",
+      "result": "unknown",
+      "reason_code": "coverage_scope_mismatch",
+      "input": "Change the destination closed window end to 2026-01-01T00:09:00Z without changing the criterion."
+    },
+    {
+      "id": "a2a-effect-mismatch",
+      "profile": "a2a",
+      "result": "refuted",
+      "reason_code": "effect_mismatch",
+      "input": "Keep the bound closed receipt but change its effect state from ready to wrong."
+    },
+    {
+      "id": "usage-below-inclusive-limits",
+      "profile": "usage",
+      "result": "confirmed",
+      "reason_code": "within_budget",
+      "input": "Use final metrics 200 input, 40 output, 2 direct tool calls, 500 ms; pin limits to 201, 41, 3, 501 with recomputed budget binding."
+    },
+    {
+      "id": "usage-exact-inclusive-limits",
+      "profile": "usage",
+      "result": "confirmed",
+      "reason_code": "within_budget",
+      "input": "Use the final-only journal and the checked-in budget with exact limits 200, 40, 2, 500."
+    },
+    {
+      "id": "usage-exceed-input",
+      "profile": "usage",
+      "result": "refuted",
+      "reason_code": "budget_exceeded",
+      "input": "Pin input_tokens limit to 199; retain other limits and final metrics; update the fixed budget digest."
+    },
+    {
+      "id": "usage-exceed-output",
+      "profile": "usage",
+      "result": "refuted",
+      "reason_code": "budget_exceeded",
+      "input": "Pin output_tokens limit to 39; retain other limits and final metrics; update the fixed budget digest."
+    },
+    {
+      "id": "usage-exceed-tool-calls",
+      "profile": "usage",
+      "result": "refuted",
+      "reason_code": "budget_exceeded",
+      "input": "Pin tool_calls limit to 1; retain other limits and final metrics; update the fixed budget digest."
+    },
+    {
+      "id": "usage-exceed-elapsed",
+      "profile": "usage",
+      "result": "refuted",
+      "reason_code": "budget_exceeded",
+      "input": "Pin elapsed_ms limit to 499; retain other limits and final metrics; update the fixed budget digest."
+    },
+    {
+      "id": "usage-missing-input",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "projection_mismatch",
+      "input": "Remove input_tokens only from the final source snapshot; keep the complete native receipt and budget."
+    },
+    {
+      "id": "usage-missing-output",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "projection_mismatch",
+      "input": "Remove output_tokens only from the final source snapshot; keep the complete native receipt and budget."
+    },
+    {
+      "id": "usage-missing-tool-calls",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "projection_mismatch",
+      "input": "Remove tool_calls only from the final source snapshot; keep the complete receipt manifest and budget."
+    },
+    {
+      "id": "usage-missing-elapsed",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "projection_mismatch",
+      "input": "Remove elapsed_ms only from the final source snapshot; keep the complete clock and budget."
+    },
+    {
+      "id": "usage-partial-record-only",
+      "profile": "usage",
+      "result": null,
+      "reason_code": null,
+      "input": "Collect only S-partial with usage_complete false and an observer selecting final types.",
+      "overrides": {
+        "observation_count": 0,
+        "series_count": 0,
+        "observer_calls": 0,
+        "event_type": "acme.run_usage.partial",
+        "usage_complete": false,
+        "pending": 0,
+        "overdue": 0
+      }
+    },
+    {
+      "id": "usage-fixed-receipt-preparing",
+      "profile": "usage",
+      "result": "pending",
+      "reason_code": "fixed_receipt_preparing",
+      "input": "Remove the manifest from the resolver and supply an exact preparing binding for its fixed id, digest, snapshot, run, budget and provider scope."
+    },
+    {
+      "id": "usage-preparing-then-ready",
+      "profile": "usage",
+      "result": "confirmed",
+      "reason_code": "within_budget",
+      "input": "Observe the exact preparing binding first, then restore the same pinned manifest and native receipts without changing source identity.",
+      "steps": [
+        {
+          "result": "pending",
+          "reason_code": "fixed_receipt_preparing",
+          "observation_count": 1,
+          "observer_calls": 1
+        },
+        {
+          "result": "confirmed",
+          "reason_code": "within_budget",
+          "observation_count": 2,
+          "observer_calls": 2
+        }
+      ],
+      "overrides": {
+        "observation_count": 2,
+        "observer_calls": 2
+      }
+    },
+    {
+      "id": "usage-manifest-missing",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "manifest_unavailable",
+      "input": "Remove the manifest without supplying a preparing binding."
+    },
+    {
+      "id": "usage-preparing-binding-mismatch",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "manifest_unavailable",
+      "input": "Remove the manifest and supply a preparing binding whose snapshot_id is different."
+    },
+    {
+      "id": "usage-receipt-missing",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "receipt_unavailable",
+      "input": "Remove R2 from available receipts while retaining its pinned version and digest in the manifest."
+    },
+    {
+      "id": "usage-receipt-digest-mismatch",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "receipt_digest_mismatch",
+      "input": "Change R2 native usage without rebinding its expected receipt digest or the manifest."
+    },
+    {
+      "id": "usage-manifest-digest-mismatch",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "manifest_digest_mismatch",
+      "input": "Replace only the source manifest digest with a different syntactically valid SHA-256 value."
+    },
+    {
+      "id": "usage-budget-digest-mismatch",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "budget_digest_mismatch",
+      "input": "Replace only the source budget digest with a different syntactically valid SHA-256 value."
+    },
+    {
+      "id": "usage-budget-revision-mismatch",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "policy_scope_mismatch",
+      "input": "Fix expected_budget_revision to 2 while the immutable event and receipt manifest remain revision 1."
+    },
+    {
+      "id": "usage-meter-mismatch",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "policy_scope_mismatch",
+      "input": "Fix expected_meter_profile to another opaque meter id while the immutable event remains unchanged."
+    },
+    {
+      "id": "usage-provider-mismatch",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "policy_scope_mismatch",
+      "input": "Fix expected_provider to anthropic while the immutable event remains OpenAI."
+    },
+    {
+      "id": "usage-api-mismatch",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "policy_scope_mismatch",
+      "input": "Fix expected_api_version to chat.completions.v2 while the immutable event remains v1."
+    },
+    {
+      "id": "usage-model-mismatch",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "policy_scope_mismatch",
+      "input": "Fix expected_model to another opaque model id while the immutable event remains unchanged."
+    },
+    {
+      "id": "usage-native-receipt-scope-mismatch",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "receipt_scope_mismatch",
+      "input": "Change only R2 model scope, then pin that changed receipt digest and manifest digest; retain the original manifest scope."
+    },
+    {
+      "id": "usage-attempt-coverage-mismatch",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "attempt_coverage_mismatch",
+      "input": "Remove A2 from expected_attempts while retaining its receipt and all scope and digest bindings."
+    },
+    {
+      "id": "usage-duplicate-provider-request",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "duplicate_consumption",
+      "input": "Give R2 the same request_ref Q1 as R1 while retaining attempt A2, then rebind receipt and manifest digests."
+    },
+    {
+      "id": "usage-normal-disjoint-children",
+      "profile": "usage",
+      "result": "confirmed",
+      "reason_code": "within_budget",
+      "input": "Use literal inclusion vector two-disjoint-children; retain root aggregate 200 input, 40 output, 120 cached input and 16 reasoning output."
+    },
+    {
+      "id": "usage-child-input-contradiction",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "child_consumption_exceeds_parent",
+      "input": "Use literal inclusion vector child-input-sum-contradiction with disjoint child requests."
+    },
+    {
+      "id": "usage-child-output-contradiction",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "child_consumption_exceeds_parent",
+      "input": "Use literal inclusion vector child-output-sum-contradiction with disjoint child requests."
+    },
+    {
+      "id": "usage-child-cache-contradiction",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "child_consumption_exceeds_parent",
+      "input": "Use literal inclusion vector child-cache-sum-contradiction; required total input stays within the parent."
+    },
+    {
+      "id": "usage-child-reasoning-contradiction",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "child_consumption_exceeds_parent",
+      "input": "Use literal inclusion vector child-reasoning-sum-contradiction; required total output stays within the parent."
+    },
+    {
+      "id": "usage-child-overlap-unknown",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "duplicate_consumption",
+      "input": "Use literal inclusion vector child-overlap-unknown with the same request identity and no explicit duplicate relation."
+    },
+    {
+      "id": "usage-child-inclusive-scope-unknown",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "inclusion_scope_unknown",
+      "input": "Use literal inclusion vector child-inclusive-scope-unknown; do not infer an overlapping nested consumption set."
+    },
+    {
+      "id": "usage-openai-interrupted-stream",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "receipt_incomplete",
+      "input": "Replace R2 native evidence with the interrupted OpenAI stream vector, then bind the new receipt and manifest digests."
+    },
+    {
+      "id": "usage-anthropic-final-usage-missing",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "receipt_incomplete",
+      "input": "Use a bound Anthropic receipt set; replace one root receipt with the start-and-stop vector missing final usage. Keep the event projection at its known 21 output lower bound."
+    },
+    {
+      "id": "usage-anthropic-stream-error",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "receipt_incomplete",
+      "input": "Use a bound Anthropic receipt set; replace one root receipt with the stream-error vector while retaining a syntactic stop."
+    },
+    {
+      "id": "usage-invalid-cache-subset",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "invalid_subset",
+      "input": "Set R2 cached input above its native prompt total and rebind receipt and manifest digests."
+    },
+    {
+      "id": "usage-native-counter-reset",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "counter_reset",
+      "input": "Use a bound Anthropic stream with cumulative output 8 followed by 1; rebind evidence without turning the reset into zero."
+    },
+    {
+      "id": "usage-clock-mismatch",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "invalid_clock",
+      "input": "Use different clock ids for run start and end, then pin the modified manifest digest."
+    },
+    {
+      "id": "usage-command-timeout",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "timeout",
+      "input": "Register a fixed owner-controlled observer command that waits beyond a 1 second command timeout; keep the source snapshot valid."
+    },
+    {
+      "id": "usage-deadline-pending-overdue",
+      "profile": "usage",
+      "result": "pending",
+      "reason_code": "fixed_receipt_preparing",
+      "input": "Use the exact preparing receipt, interval 3600 seconds and deadline 1 second; wait for overdue without running the observer again.",
+      "overrides": {
+        "pending": 1,
+        "overdue": 1
+      }
+    },
+    {
+      "id": "usage-deadline-unknown-overdue",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "manifest_unavailable",
+      "input": "Use the absent manifest, interval 3600 seconds and deadline 1 second; wait for overdue without changing the observation.",
+      "overrides": {
+        "pending": 1,
+        "overdue": 1
+      }
+    },
+    {
+      "id": "usage-openai-final-stream",
+      "profile": "usage",
+      "result": "confirmed",
+      "reason_code": "within_budget",
+      "input": "Replace only R2 native receipt with the complete OpenAI final-stream vector, then bind the modified receipt and manifest digests. Keep projected totals at 200 input, 40 output, 120 cached and 16 reasoning.",
+      "overrides": {
+        "metrics": {
+          "input_tokens": 200,
+          "output_tokens": 40,
+          "cached_input_tokens": 120,
+          "reasoning_output_tokens": 16,
+          "tool_calls": 2,
+          "elapsed_ms": 500
+        }
+      }
+    },
+    {
+      "id": "usage-anthropic-cache-components",
+      "profile": "usage",
+      "result": "confirmed",
+      "reason_code": "within_budget",
+      "input": "Bind all provider scopes to anthropic, messages.2023-06-01 and anthropic.messages.provider.v1. Root and proxy receipts each report native input 10, cache creation 30, cache read 60 and output 20. The excluded child reports input 10, cache creation 10, cache read 10 and output 5. Omit source reasoning output.",
+      "overrides": {
+        "metrics": {
+          "input_tokens": 200,
+          "output_tokens": 40,
+          "cached_input_tokens": 120,
+          "tool_calls": 2,
+          "elapsed_ms": 500
+        },
+        "absent_attributes": [
+          "reasoning_output_tokens"
+        ]
+      }
+    },
+    {
+      "id": "usage-anthropic-cumulative-stream",
+      "profile": "usage",
+      "result": "confirmed",
+      "reason_code": "within_budget",
+      "input": "Use the bound Anthropic fixture. Root and proxy receipts use the cumulative stream vector with output counters 1, 8 and 20. The excluded child uses the complete non-streaming native receipt with input 10, cache creation 10, cache read 10 and output 5. Omit source reasoning output; final aggregate output remains 40.",
+      "overrides": {
+        "metrics": {
+          "input_tokens": 200,
+          "output_tokens": 40,
+          "cached_input_tokens": 120,
+          "tool_calls": 2,
+          "elapsed_ms": 500
+        },
+        "absent_attributes": [
+          "reasoning_output_tokens"
+        ]
+      }
+    },
+    {
+      "id": "a2a-open-with-effect",
+      "profile": "a2a",
+      "result": "pending",
+      "reason_code": "coverage_open",
+      "input": "Keep the valid effect and artifact evidence but set the destination receipt complete to false."
+    },
+    {
+      "id": "a2a-future-window-not-closed",
+      "profile": "a2a",
+      "result": "unknown",
+      "reason_code": "coverage_not_closed",
+      "input": "Set the criterion and destination receipt window to 2099-01-01T00:00:00Z through 2099-01-01T00:10:00Z, set effect occurred_at to 2099-01-01T00:01:00Z and retain complete true."
+    },
+    {
+      "id": "usage-openai-top-level-api-error",
+      "profile": "usage",
+      "result": "unknown",
+      "reason_code": "receipt_incomplete",
+      "input": "Replace only R2 native receipt with the openai-top-level-api-error vector, then bind the modified receipt and manifest digests. Keep projected totals at 200 input, 40 output, 120 cached and 16 reasoning."
+    },
+    {
+      "id": "usage-openai-metadata-error",
+      "profile": "usage",
+      "result": "confirmed",
+      "reason_code": "within_budget",
+      "input": "Replace only R2 native receipt with the openai-metadata-error vector, then bind the modified receipt and manifest digests. Keep projected totals at 200 input, 40 output, 120 cached and 16 reasoning.",
+      "overrides": {
+        "metrics": {
+          "input_tokens": 200,
+          "output_tokens": 40,
+          "cached_input_tokens": 120,
+          "reasoning_output_tokens": 16,
+          "tool_calls": 2,
+          "elapsed_ms": 500
+        }
+      }
+    },
+    {
+      "id": "usage-openai-moderation-error",
+      "profile": "usage",
+      "result": "confirmed",
+      "reason_code": "within_budget",
+      "input": "Replace only R2 native receipt with the openai-moderation-error vector, then bind the modified receipt and manifest digests. Keep projected totals at 200 input, 40 output, 120 cached and 16 reasoning.",
+      "overrides": {
+        "metrics": {
+          "input_tokens": 200,
+          "output_tokens": 40,
+          "cached_input_tokens": 120,
+          "reasoning_output_tokens": 16,
+          "tool_calls": 2,
+          "elapsed_ms": 500
+        }
+      }
+    },
+    {
+      "id": "usage-openai-content-error",
+      "profile": "usage",
+      "result": "confirmed",
+      "reason_code": "within_budget",
+      "input": "Replace only R2 native receipt with the openai-content-error vector, then bind the modified receipt and manifest digests. Keep projected totals at 200 input, 40 output, 120 cached and 16 reasoning.",
+      "overrides": {
+        "metrics": {
+          "input_tokens": 200,
+          "output_tokens": 40,
+          "cached_input_tokens": 120,
+          "reasoning_output_tokens": 16,
+          "tool_calls": 2,
+          "elapsed_ms": 500
+        }
+      }
+    },
+    {
+      "id": "usage-openai-future-field",
+      "profile": "usage",
+      "result": "confirmed",
+      "reason_code": "within_budget",
+      "input": "Replace only R2 native receipt with the openai-future-field vector, then bind the modified receipt and manifest digests. Keep projected totals at 200 input, 40 output, 120 cached and 16 reasoning.",
+      "overrides": {
+        "metrics": {
+          "input_tokens": 200,
+          "output_tokens": 40,
+          "cached_input_tokens": 120,
+          "reasoning_output_tokens": 16,
+          "tool_calls": 2,
+          "elapsed_ms": 500
+        }
+      }
+    },
+    {
+      "id": "usage-openai-empty-error",
+      "profile": "usage",
+      "result": "confirmed",
+      "reason_code": "within_budget",
+      "input": "Replace only R2 native receipt with the openai-empty-error vector, then bind the modified receipt and manifest digests. Keep projected totals at 200 input, 40 output, 120 cached and 16 reasoning.",
+      "overrides": {
+        "metrics": {
+          "input_tokens": 200,
+          "output_tokens": 40,
+          "cached_input_tokens": 120,
+          "reasoning_output_tokens": 16,
+          "tool_calls": 2,
+          "elapsed_ms": 500
+        }
+      }
+    }
+  ]
+}
