@@ -6,6 +6,7 @@ Thanks for helping. Bug reports and fixes are welcome. For a security problem us
 
 - Go at the version in [go.mod](../go.mod)
 - [golangci-lint](https://golangci-lint.run) v2, the version CI pins in [test.yml](workflows/test.yml)
+- Python 3.10 or later for the example and trigger tests
 
 ## Checks
 
@@ -16,9 +17,14 @@ gofmt -l .
 go vet ./...
 golangci-lint run ./...
 go test -race ./...
+python3 -B -m unittest discover -s examples/observe -p 'test_*.py'
+python3 -B -m unittest discover -s plugin -p 'test_eval_triggers.py'
+go build -trimpath -o /tmp/rindcut ./cmd/rindcut
+python3 examples/observe/profile_scenario.py --binary /tmp/rindcut
 ```
 
 - `gofmt -l .` prints nothing when every file is formatted
+- The last two lines run the observation profiles through the public CLI and MCP with one binary
 
 ## Commits and pull requests
 
