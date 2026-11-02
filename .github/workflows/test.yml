@@ -38,6 +38,8 @@ jobs:
         run: go test -race -coverprofile=cover.out ./...
       - name: Observation profile tests
         run: python3 -B -m unittest discover -s examples/observe -p 'test_*.py'
+      - name: Trigger runner tests
+        run: python3 -B -m unittest discover -s plugin -p 'test_eval_triggers.py'
       - name: Observation profile public contracts
         run: |
           go build -trimpath -o "$RUNNER_TEMP/rindcut" ./cmd/rindcut

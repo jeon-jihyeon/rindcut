@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: watch-local-output
+expected_outcome: |
+  Invoke the rindcut skill for registration guidance.
+  Do not register a real job or start a scheduler.
